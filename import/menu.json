@@ -1,0 +1,291 @@
+{
+    "menuItems": [
+        {
+            "name": "kai hor kiew",
+            "image": "drawable/kai_hor_kiew",
+            "vegetarian": false,
+            "spicy": false
+        },
+        {
+            "name": "look chin ping",
+            "image": "drawable/look_chin_ping",
+            "vegetarian": true,
+            "spicy": false,
+            "protein": [
+                "chicken",
+                "tofu",
+                "fish",
+                "pork",
+                "beef"
+            ]
+        },
+        {
+            "name": "moo ping",
+            "image": "drawable/moo_ping",
+            "vegetarian": false,
+            "spicy": false
+        },
+        {
+            "name": "sai grok issan",
+            "image": "drawable/sai_grok_issan",
+            "vegetarian": false,
+            "spicy": false
+        },
+        {
+            "name": "goong ping",
+            "image": "drawable/goong_ping",
+            "vegetarian": false,
+            "spicy": false
+        },
+        {
+            "name": "seen hang",
+            "image": "drawable/seen_hang",
+            "vegetarian": false,
+            "spicy": false
+        },
+        {
+            "name": "pork crackling",
+            "image": "drawable/pork_crackling",
+            "vegetarian": false,
+            "spicy": false
+        },
+        {
+            "name": "kanom guichai",
+            "image": "drawable/kanom_guichai",
+            "vegetarian": true,
+            "spicy": false
+        },
+        {
+            "name": "peek gai tod",
+            "image": "drawable/peek_gai_tod",
+            "vegetarian": false,
+            "spicy": false
+        },
+        {
+            "name": "sakoo yat sai",
+            "image": "drawable/sakoo_yat_sai",
+            "vegetarian": true,
+            "spicy": false
+        },
+        {
+            "name": "pad si ew",
+            "image": "drawable/pad_si_ew",
+            "vegetarian": true,
+            "spicy": false,
+            "protein": [
+                "chicken",
+                "pork",
+                "beef",
+                "vegetarian",
+                "vegan"
+            ]
+        },
+        {
+            "name": "pad ki mao",
+            "image": "drawable/pad_ki_mao",
+            "vegetarian": true,
+            "spicy": false,
+            "protein": [
+                "chicken",
+                "pork",
+                "beef",
+                "vegetarian",
+                "vegan"
+            ]
+        },
+        {
+            "name": "pad thai",
+            "image": "drawable/pad_thai",
+            "vegetarian": true,
+            "spicy": false,
+            "protein": [
+                "chicken",
+                "pork",
+                "beef",
+                "vegetarian",
+                "vegan"
+            ]
+        },
+        {
+            "name": "lard na",
+            "image": "drawable/lard_na",
+            "vegetarian": true,
+            "spicy": false,
+            "protein": [
+                "chicken",
+                "pork",
+                "beef",
+                "vegetarian"
+            ],
+            "noodleType": [
+                "crispy_egg",
+                "flat_rice"
+            ]
+        },
+        {
+            "name": "kuay teow toon",
+            "image": "drawable/kuay_teow_toon",
+            "vegetarian": true,
+            "spicy": false,
+            "protein": [
+                "chicken",
+                "pork",
+                "beef"
+            ],
+            "noodleType": [
+                "rice",
+                "egg"
+            ]
+        },
+        {
+            "name": "tom yum noodles",
+            "image": "drawable/tom_yum_noodles",
+            "vegetarian": true,
+            "spicy": false,
+            "protein": [
+                "dry_pork",
+                "dry_vegetarian",
+                "soup_pork",
+                "soup_vegetarian"
+            ],
+            "noodleType": [
+                "rice",
+                "egg"
+            ]
+        },
+        {
+            "name": "yen ta fo",
+            "image": "drawable/yen_ta_fo",
+            "vegetarian": false,
+            "spicy": false,
+            "noodleType": [
+                "flat_rice",
+                "thin_rice",
+                "egg"
+            ]
+        },
+        {
+            "name": "boat noodles",
+            "image": "drawable/boat_noodles",
+            "vegetarian": false,
+            "spicy": false,
+            "protein": [
+                "pork",
+                "beef"
+            ],
+            "noodleType": [
+                "rice",
+                "egg"
+            ]
+        },
+        {
+            "name": "guay jub",
+            "image": "drawable/guay_jub",
+            "vegetarian": false,
+            "spicy": false
+        },
+        {
+            "name": "gaeng aw",
+            "image": "drawable/gaeng_aw",
+            "vegetarian": true,
+            "spicy": false,
+            "protein": [
+                "beef",
+                "vegetarian"
+            ]
+        },
+        {
+            "name": "tom lued moo",
+            "image": "drawable/tom_lued_moo",
+            "vegetarian": false,
+            "spicy": false
+        },
+        {
+            "name": "tom jued",
+            "image": "drawable/tom_jued",
+            "vegetarian": true,
+            "spicy": false,
+            "protein": [
+                "pork",
+                "vegetarian"
+            ]
+        },
+        {
+            "name": "tom yum",
+            "image": "drawable/tom_yum",
+            "vegetarian": true,
+            "spicy": false,
+            "protein": [
+                "prawn",
+                "vegetarian"
+            ]
+        },
+        {
+            "name": "tom zaab",
+            "image": "drawable/tom_zaab",
+            "vegetarian": false,
+            "spicy": false
+        },
+        {
+            "name": "green curry",
+            "image": "drawable/green_curry",
+            "vegetarian": true,
+            "spicy": false,
+            "protein": [
+                "chicken",
+                "vegan"
+            ]
+        },
+        {
+            "name": "tum mak hoong",
+            "image": "drawable/tum_mak_hoong",
+            "vegetarian": true,
+            "spicy": true,
+            "spiceLevel": [
+                "Mild",
+                "Medium",
+                "Hot",
+                "Thai_Hot"
+            ]
+        },
+        {
+            "name": "som tum",
+            "image": "drawable/som_tum",
+            "vegetarian": true,
+            "spicy": true,
+            "spiceLevel": [
+                "Mild",
+                "Medium",
+                "Hot",
+                "Thai_Hot"
+            ]
+        },
+        {
+            "name": "laab",
+            "image": "drawable/laab",
+            "vegetarian": true,
+            "spicy": true,
+            "spiceLevel": [
+                "Mild",
+                "Medium",
+                "Hot",
+                "Thai_Hot"
+            ],
+            "protein": [
+                "chicken",
+                "tofu",
+                "vegan"
+            ]
+        },
+        {
+            "name": "neam khao",
+            "image": "drawable/neam_khao",
+            "vegetarian": true,
+            "spicy": false,
+            "protein": [
+                "pork",
+                "vegetarian"
+            ]
+        }
+    ]
+}
