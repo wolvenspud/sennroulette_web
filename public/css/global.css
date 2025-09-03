@@ -177,3 +177,130 @@ h1 {
 }
 
 
+/* Admin layout and dark theme */
+.admin-container {
+  width: min-content;
+  max-width: none;                 /* remove fixed cap */
+  margin: 1rem 0 2rem 0;
+  padding-left: clamp(8px, 2vw, 24px);
+  padding-right: clamp(8px, 2vw, 24px);
+}
+
+.admin-box {
+  background: #111827;            /* dark slate */
+  color: #f9fafb;                 /* near-white text */
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 10px;
+  padding: 1rem 1.25rem;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+  width: 100%;
+}
+
+.admin-box {
+  display: inline-block;                         /* shrink-to-fit */
+  width: fit-content;
+  max-width: 100%;
+}
+
+.page-title {
+  margin: 0 0 0.75rem 0;
+  color: #f9fafb;
+}
+
+.admin-ok { color: #34d399; }     /* green-400 */
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 0.5rem;
+  color: #f9fafb;
+  text-align: left;
+}
+.admin-table th, .admin-table td {
+  border: 1px solid rgba(255,255,255,0.15);
+  padding: 8px;
+}
+.admin-table thead th {
+  background: #0b1220;
+}
+
+.admin-actions,
+.row-form {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+/* Form controls inside admin box */
+.admin-box input[type="text"],
+.admin-box input[type="number"],
+.admin-box input[type="password"],
+.admin-box select {
+  background: #0b1220;
+  color: #f9fafb;
+  border: 1px solid rgba(255,255,255,0.18);
+  border-radius: 6px;
+  padding: 6px 8px;
+}
+.admin-box input::placeholder { color: rgba(249,250,251,0.6); }
+
+.admin-box button {
+  background: #374151;
+  color: #ffffff;
+  border: 1px solid rgba(255,255,255,0.18);
+  border-radius: 6px;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+.admin-box button:hover { background: #4b5563; }
+.admin-box button:focus { outline: 2px solid #60a5fa; outline-offset: 2px; }
+
+/* Inline label helper */
+.admin-box label.inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* Add-item form inline so it doesn't force full width */
+.admin-form {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.admin-box .admin-form label {                   /* override global label */
+  display: inline-block;
+  margin: 0;
+  white-space: nowrap;
+}
+.admin-box .admin-form input[type="text"],
+.admin-box .admin-form input[type="number"],
+.admin-box .admin-form select {
+  width: auto;                                   /* prevent 100% expansion */
+}
+
+/* Table wrapper: min(content, screen); scroll if overflow */
+.admin-table-wrap {
+  display: inline-block;
+  width: fit-content;
+  max-width: 100%;
+  overflow-x: auto;
+  vertical-align: top;
+}
+.admin-table-wrap > .admin-table { width: max-content; }
+
+/* Keep item rows on one line */
+.admin-table td .item-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: nowrap;
+}
+.admin-table td .item-row > label { white-space: nowrap; }
+
+/* Don't wrap delete cell; keep button visible */
+.admin-table td.delete-cell { white-space: nowrap; }
+
+

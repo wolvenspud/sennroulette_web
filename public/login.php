@@ -87,6 +87,11 @@ include __DIR__ . '/header.php';
 
     </form>
 
+    <!-- Register button inside the login page -->
+    <p style="margin-top:1rem; display:inline-flex; align-items:center; gap:0.5rem;">
+      No account?
+      <button type="button" onclick="location.href='/register.php'">Register</button>
+    </p>
   </div>
 
 <?php include __DIR__ . '/footer.php'; ?>
