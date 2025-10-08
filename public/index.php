@@ -80,12 +80,8 @@ if ($itemsJson === false) {
     $itemsJson = '[]';
 }
 
-$selectedCourseLabels = array_map(function ($slug) use ($courseLabels) {
-    return $courseLabels[$slug] ?? $slug;
-}, $preferences['courses']);
-$selectedProteinLabels = array_map(function ($slug) use ($proteinLabels) {
-    return $proteinLabels[$slug] ?? $slug;
-}, $preferences['proteins']);
+$selectedCourseLabels = array_map(fn ($slug) => $courseLabels[$slug] ?? $slug, $preferences['courses']);
+$selectedProteinLabels = array_map(fn ($slug) => $proteinLabels[$slug] ?? $slug, $preferences['proteins']);
 
 include __DIR__ . '/header.php';
 ?>
