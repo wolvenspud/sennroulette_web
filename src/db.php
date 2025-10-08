@@ -52,7 +52,7 @@ function migrate(PDO $pdo): void {
 
         id     INTEGER PRIMARY KEY AUTOINCREMENT,
 
-        slug   TEXT NOT NULL UNIQUE CHECK (slug IN ("mains","appetisers")),
+        slug   TEXT NOT NULL UNIQUE,
 
         label  TEXT NOT NULL
 
@@ -98,7 +98,7 @@ function migrate(PDO $pdo): void {
 
         id    INTEGER PRIMARY KEY AUTOINCREMENT,
 
-        slug  TEXT NOT NULL UNIQUE CHECK (slug IN ("vegan","vegetarian","pork","seafood","chicken","beef")),
+        slug  TEXT NOT NULL UNIQUE,
 
         label TEXT NOT NULL
 
