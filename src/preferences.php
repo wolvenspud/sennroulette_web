@@ -12,39 +12,8 @@ const PREF_COOKIE_TTL = 31536000; // 1 year
  */
 function fetch_course_options(PDO $pdo): array
 {
-    if (!db_table_exists($pdo, 'courses')) {
-        return [];
-    }
-
-    try {
-        $stmt = $pdo->query('SELECT id, slug, label FROM courses ORDER BY label');
-    } catch (Throwable $e) {
-        return [];
-    }
-
-    if ($stmt === false) {
-        return [];
-    }
-
-    $options = [];
-    $seen = [];
-
-    foreach ($stmt->fetchAll() as $row) {
-        if (empty($row['slug']) || isset($seen[$row['slug']])) {
-            continue;
-        }
-
-        $slug = (string)$row['slug'];
-        $seen[$slug] = true;
-
-        $options[] = [
-            'id'    => isset($row['id']) ? (int)$row['id'] : count($options),
-            'slug'  => $slug,
-            'label' => isset($row['label']) && $row['label'] !== '' ? (string)$row['label'] : $slug,
-        ];
-    }
-
-    return $options;
+    $stmt = $pdo->query('SELECT id, slug, label FROM courses ORDER BY label');
+    return $stmt->fetchAll();
 }
 
 /**
@@ -54,39 +23,8 @@ function fetch_course_options(PDO $pdo): array
  */
 function fetch_protein_options(PDO $pdo): array
 {
-    if (!db_table_exists($pdo, 'proteins')) {
-        return [];
-    }
-
-    try {
-        $stmt = $pdo->query('SELECT id, slug, label FROM proteins ORDER BY label');
-    } catch (Throwable $e) {
-        return [];
-    }
-
-    if ($stmt === false) {
-        return [];
-    }
-
-    $options = [];
-    $seen = [];
-
-    foreach ($stmt->fetchAll() as $row) {
-        if (empty($row['slug']) || isset($seen[$row['slug']])) {
-            continue;
-        }
-
-        $slug = (string)$row['slug'];
-        $seen[$slug] = true;
-
-        $options[] = [
-            'id'    => isset($row['id']) ? (int)$row['id'] : count($options),
-            'slug'  => $slug,
-            'label' => isset($row['label']) && $row['label'] !== '' ? (string)$row['label'] : $slug,
-        ];
-    }
-
-    return $options;
+    $stmt = $pdo->query('SELECT id, slug, label FROM proteins ORDER BY label');
+    return $stmt->fetchAll();
 }
 
 /**
@@ -106,14 +44,11 @@ function default_preferences(array $courses, array $proteins): array
  */
 function sanitise_preferences(array $prefs, array $courses, array $proteins): array
 {
-    $courseSlugs  = array_map('strval', array_column($courses, 'slug'));
-    $proteinSlugs = array_map('strval', array_column($proteins, 'slug'));
+    $courseSlugs  = array_column($courses, 'slug');
+    $proteinSlugs = array_column($proteins, 'slug');
 
-    $rawCourses = isset($prefs['courses']) && is_array($prefs['courses']) ? array_map('strval', $prefs['courses']) : [];
-    $rawProteins = isset($prefs['proteins']) && is_array($prefs['proteins']) ? array_map('strval', $prefs['proteins']) : [];
-
-    $sanitisedCourses = array_values(array_intersect($rawCourses, $courseSlugs));
-    $sanitisedProteins = array_values(array_intersect($rawProteins, $proteinSlugs));
+    $sanitisedCourses = array_values(array_intersect($prefs['courses'] ?? [], $courseSlugs));
+    $sanitisedProteins = array_values(array_intersect($prefs['proteins'] ?? [], $proteinSlugs));
 
     $maxSpice = $prefs['max_spice'] ?? 5;
     if (!is_numeric($maxSpice)) {
@@ -142,31 +77,30 @@ function load_preferences(PDO $pdo, ?int $userId, array $courses, array $protein
 {
     $defaults = default_preferences($courses, $proteins);
 
-    $decode = static function (string $json) use ($courses, $proteins): ?array {
-        $data = json_decode($json, true);
-        if (json_last_error() !== JSON_ERROR_NONE || !is_array($data)) {
-            return null;
-        }
-
-        return sanitise_preferences($data, $courses, $proteins);
-    };
-
     if ($userId !== null) {
         $stmt = $pdo->prepare('SELECT filters_json FROM user_preferences WHERE user_id = ?');
         $stmt->execute([$userId]);
         $row = $stmt->fetch();
         if ($row && is_string($row['filters_json'])) {
-            $decoded = $decode($row['filters_json']);
-            if ($decoded !== null) {
-                return $decoded;
+            try {
+                $data = json_decode($row['filters_json'], true, 512, JSON_THROW_ON_ERROR);
+            } catch (Throwable $e) {
+                $data = null;
+            }
+            if (is_array($data)) {
+                return sanitise_preferences($data, $courses, $proteins);
             }
         }
     }
 
-    if (!empty($_COOKIE[PREF_COOKIE_NAME]) && is_string($_COOKIE[PREF_COOKIE_NAME])) {
-        $decoded = $decode($_COOKIE[PREF_COOKIE_NAME]);
-        if ($decoded !== null) {
-            return $decoded;
+    if (!empty($_COOKIE[PREF_COOKIE_NAME])) {
+        try {
+            $data = json_decode((string)$_COOKIE[PREF_COOKIE_NAME], true, 512, JSON_THROW_ON_ERROR);
+        } catch (Throwable $e) {
+            $data = null;
+        }
+        if (is_array($data)) {
+            return sanitise_preferences($data, $courses, $proteins);
         }
     }
 
@@ -179,24 +113,19 @@ function load_preferences(PDO $pdo, ?int $userId, array $courses, array $protein
 function persist_preferences(PDO $pdo, ?int $userId, array $prefs, array $courses, array $proteins): void
 {
     $prefs = sanitise_preferences($prefs, $courses, $proteins);
-    $json = json_encode($prefs, JSON_UNESCAPED_UNICODE);
-    if ($json === false) {
-        throw new RuntimeException('Unable to encode preferences to JSON.');
-    }
+    $json = json_encode($prefs, JSON_THROW_ON_ERROR);
 
     if ($userId !== null) {
         $stmt = $pdo->prepare('REPLACE INTO user_preferences (user_id, filters_json, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)');
         $stmt->execute([$userId, $json]);
     } else {
-        setcookie(
-            PREF_COOKIE_NAME,
-            $json,
-            time() + PREF_COOKIE_TTL,
-            '/',
-            '',
-            false,
-            false
-        );
+        setcookie(PREF_COOKIE_NAME, $json, [
+            'expires'  => time() + PREF_COOKIE_TTL,
+            'path'     => '/',
+            'secure'   => false,
+            'httponly' => false,
+            'samesite' => 'Lax',
+        ]);
         $_COOKIE[PREF_COOKIE_NAME] = $json;
     }
 }

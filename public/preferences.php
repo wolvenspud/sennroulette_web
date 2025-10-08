@@ -48,41 +48,29 @@ include __DIR__ . '/header.php';
       <section>
         <h2>Courses</h2>
         <p>Select the types of dishes you want to see.</p>
-        <?php if (!empty($courses)): ?>
-          <div class="preferences-grid">
-            <?php foreach ($courses as $course): ?>
-              <?php if (empty($course['slug'])) { continue; } ?>
-              <?php $slug = (string)$course['slug']; ?>
-              <?php $checked = in_array($slug, $current['courses'], true); ?>
-              <label class="pref-checkbox">
-                <input type="checkbox" name="courses[]" value="<?= htmlspecialchars($slug) ?>" <?= $checked ? 'checked' : '' ?>>
-                <span><?= htmlspecialchars(isset($course['label']) && $course['label'] !== '' ? $course['label'] : $slug) ?></span>
-              </label>
-            <?php endforeach; ?>
-          </div>
-        <?php else: ?>
-          <p class="preferences-empty">Course filters are unavailable right now.</p>
-        <?php endif; ?>
+        <div class="preferences-grid">
+          <?php foreach ($courses as $course): ?>
+            <?php $checked = in_array($course['slug'], $current['courses'], true); ?>
+            <label class="pref-checkbox">
+              <input type="checkbox" name="courses[]" value="<?= htmlspecialchars($course['slug']) ?>" <?= $checked ? 'checked' : '' ?>>
+              <span><?= htmlspecialchars($course['label']) ?></span>
+            </label>
+          <?php endforeach; ?>
+        </div>
       </section>
 
       <section>
         <h2>Proteins</h2>
         <p>We only show dishes that can be prepared with your selected proteins.</p>
-        <?php if (!empty($proteins)): ?>
-          <div class="preferences-grid">
-            <?php foreach ($proteins as $protein): ?>
-              <?php if (empty($protein['slug'])) { continue; } ?>
-              <?php $slug = (string)$protein['slug']; ?>
-              <?php $checked = in_array($slug, $current['proteins'], true); ?>
-              <label class="pref-checkbox">
-                <input type="checkbox" name="proteins[]" value="<?= htmlspecialchars($slug) ?>" <?= $checked ? 'checked' : '' ?>>
-                <span><?= htmlspecialchars(isset($protein['label']) && $protein['label'] !== '' ? $protein['label'] : $slug) ?></span>
-              </label>
-            <?php endforeach; ?>
-          </div>
-        <?php else: ?>
-          <p class="preferences-empty">Protein filters are unavailable right now.</p>
-        <?php endif; ?>
+        <div class="preferences-grid">
+          <?php foreach ($proteins as $protein): ?>
+            <?php $checked = in_array($protein['slug'], $current['proteins'], true); ?>
+            <label class="pref-checkbox">
+              <input type="checkbox" name="proteins[]" value="<?= htmlspecialchars($protein['slug']) ?>" <?= $checked ? 'checked' : '' ?>>
+              <span><?= htmlspecialchars($protein['label']) ?></span>
+            </label>
+          <?php endforeach; ?>
+        </div>
       </section>
 
       <section>

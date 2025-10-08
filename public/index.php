@@ -209,28 +209,64 @@ foreach ($items as $item) {
         'proteins'     => $normalisedProteins,
         'base_spice'   => $itemSpice !== null ? max(0, min(5, (int)$itemSpice)) : 0,
     ];
+    $courseLabels[$course['slug']] = $course['label'];
+}
+$proteinLabels = [];
+foreach ($proteins as $protein) {
+    $proteinLabels[$protein['slug']] = $protein['label'];
+}
+
+$itemsStmt = $pdo->query('SELECT i.id, i.name, i.description, i.image_path, i.base_spice, c.slug AS course_slug, c.label AS course_label
+    FROM items i
+    INNER JOIN courses c ON c.id = i.course_id
+    WHERE i.enabled = 1
+    ORDER BY i.name');
+$items = $itemsStmt->fetchAll();
+
+$proteinRows = $pdo->query('SELECT iap.item_id, p.slug, p.label FROM item_allowed_proteins iap INNER JOIN proteins p ON p.id = iap.protein_id')->fetchAll();
+$proteinMap = [];
+foreach ($proteinRows as $row) {
+    $proteinMap[(int)$row['item_id']][] = [
+        'slug'  => $row['slug'],
+        'label' => $row['label'],
+    ];
+}
+
+$filteredItems = [];
+foreach ($items as $item) {
+    $itemId = (int)$item['id'];
+    $itemProteins = $proteinMap[$itemId] ?? [];
+    $itemProteinSlugs = array_column($itemProteins, 'slug');
+
+    if (!in_array($item['course_slug'], $preferences['courses'], true)) {
+        continue;
+    }
+
+    if (!empty($preferences['proteins'])) {
+        if (empty($itemProteinSlugs)) {
+            continue;
+        }
+        if (!array_intersect($itemProteinSlugs, $preferences['proteins'])) {
+            continue;
+        }
+    }
+
+    if ((int)$item['base_spice'] > (int)$preferences['max_spice']) {
+        continue;
+    }
+
+    $item['proteins'] = $itemProteins;
+    $filteredItems[] = $item;
 }
 
 $clientItems = [];
 foreach ($filteredItems as $item) {
-    $clientProteins = [];
-    foreach ($item['proteins'] as $protein) {
-        if (empty($protein['slug'])) {
-            continue;
-        }
-
-        $clientProteins[] = [
-            'slug'  => (string)$protein['slug'],
-            'label' => isset($protein['label']) && $protein['label'] !== '' ? (string)$protein['label'] : (string)$protein['slug'],
-        ];
-    }
-
     $clientItems[] = [
         'name'        => $item['name'],
         'description' => $item['description'] ?? '',
         'courseLabel' => $item['course_label'],
-        'courseSlug'  => $item['course_slug'] ?? '',
-        'proteins'    => $clientProteins,
+        'courseSlug'  => $item['course_slug'],
+        'proteins'    => $item['proteins'],
         'baseSpice'   => (int)$item['base_spice'],
         'imagePath'   => $item['image_path'] ?? null,
     ];
@@ -241,27 +277,8 @@ if ($itemsJson === false) {
     $itemsJson = '[]';
 }
 
-$selectedCourseLabels = [];
-if (!empty($courseFilter)) {
-    foreach ($courseFilter as $slug) {
-        $selectedCourseLabels[] = $courseLabels[$slug] ?? $slug;
-    }
-}
-if (empty($selectedCourseLabels)) {
-    $selectedCourseLabels[] = 'All courses';
-}
-$selectedCourseLabels = array_values(array_unique($selectedCourseLabels));
-
-$selectedProteinLabels = [];
-if (!empty($proteinFilter)) {
-    foreach ($proteinFilter as $slug) {
-        $selectedProteinLabels[] = $proteinLabels[$slug] ?? $slug;
-    }
-}
-if (empty($selectedProteinLabels)) {
-    $selectedProteinLabels[] = 'All proteins';
-}
-$selectedProteinLabels = array_values(array_unique($selectedProteinLabels));
+$selectedCourseLabels = array_map(fn ($slug) => $courseLabels[$slug] ?? $slug, $preferences['courses']);
+$selectedProteinLabels = array_map(fn ($slug) => $proteinLabels[$slug] ?? $slug, $preferences['proteins']);
 
 include __DIR__ . '/header.php';
 ?>
