@@ -38,6 +38,14 @@ $pdo->exec('PRAGMA foreign_keys = ON');
 
 function migrate(PDO $pdo): void {
 
+    $pdo->exec('CREATE TABLE IF NOT EXISTS users (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        username   TEXT NOT NULL UNIQUE,
+        password   TEXT NOT NULL,
+        is_admin   INTEGER NOT NULL DEFAULT 0 CHECK (is_admin IN (0,1)),
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )');
+
     // Courses (mains/appetisers)
 
     $pdo->exec('CREATE TABLE IF NOT EXISTS courses (
@@ -116,6 +124,15 @@ function migrate(PDO $pdo): void {
 
 
 
+    $pdo->exec('CREATE TABLE IF NOT EXISTS user_preferences (
+        user_id      INTEGER PRIMARY KEY,
+        filters_json TEXT NOT NULL,
+        updated_at   TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )');
+
+
+
     // Seed lookup tables
 
     $pdo->exec('INSERT OR IGNORE INTO courses(slug,label) VALUES ("mains","Mains"),("appetisers","Appetisers")');
@@ -141,5 +158,68 @@ function migrate(PDO $pdo): void {
 // Run migrations
 
 migrate($pdo);
+
+/**
+ * Determine if a table exists in the current SQLite database.
+ */
+function db_table_exists(PDO $pdo, string $table): bool
+{
+    static $cache = [];
+
+    if (isset($cache[$table])) {
+        return $cache[$table];
+    }
+
+    try {
+        $stmt = $pdo->prepare('SELECT 1 FROM sqlite_master WHERE type = "table" AND name = ? LIMIT 1');
+        if ($stmt === false) {
+            return $cache[$table] = false;
+        }
+        $stmt->execute([$table]);
+        $cache[$table] = $stmt->fetchColumn() !== false;
+        return $cache[$table];
+    } catch (Throwable $e) {
+        $cache[$table] = false;
+        return false;
+    }
+}
+
+/**
+ * Fetch the column names for a given table. Returns an empty array if the table
+ * cannot be inspected.
+ */
+function db_table_columns(PDO $pdo, string $table): array
+{
+    static $cache = [];
+
+    if (isset($cache[$table])) {
+        return $cache[$table];
+    }
+
+    if (!db_table_exists($pdo, $table)) {
+        $cache[$table] = [];
+        return $cache[$table];
+    }
+
+    $columns = [];
+
+    try {
+        $identifier = str_replace('"', '""', $table);
+        $stmt = $pdo->query('PRAGMA table_info("' . $identifier . '")');
+        if ($stmt !== false) {
+            foreach ($stmt as $row) {
+                if (isset($row['name'])) {
+                    $columns[] = $row['name'];
+                }
+            }
+        }
+    } catch (Throwable $e) {
+        $columns = [];
+    }
+
+    $cache[$table] = $columns;
+
+    return $columns;
+}
 
 
