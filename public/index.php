@@ -12,6 +12,203 @@ $preferences = load_preferences($pdo, $userId, $courses, $proteins);
 
 $courseLabels = [];
 foreach ($courses as $course) {
+    if (!isset($course['slug'])) {
+        continue;
+    }
+
+    $slug = (string)$course['slug'];
+    $label = isset($course['label']) && $course['label'] !== '' ? (string)$course['label'] : $slug;
+
+    $courseLabels[$slug] = $label;
+}
+
+$proteinLabels = [];
+foreach ($proteins as $protein) {
+    if (!isset($protein['slug'])) {
+        continue;
+    }
+
+    $slug = (string)$protein['slug'];
+    $label = isset($protein['label']) && $protein['label'] !== '' ? (string)$protein['label'] : $slug;
+
+    $proteinLabels[$slug] = $label;
+}
+
+$items = [];
+$itemColumns = db_table_columns($pdo, 'items');
+
+if (!empty($itemColumns)) {
+    $selectParts = [
+        in_array('id', $itemColumns, true) ? 'i.id' : 'i.rowid AS id',
+        in_array('name', $itemColumns, true) ? 'i.name' : "'' AS name",
+        in_array('description', $itemColumns, true) ? 'i.description' : "'' AS description",
+        in_array('image_path', $itemColumns, true) ? 'i.image_path' : 'NULL AS image_path',
+    ];
+
+    $hasBaseSpice = in_array('base_spice', $itemColumns, true);
+    $hasMinSpice = in_array('min_spice', $itemColumns, true);
+    $hasMaxSpice = in_array('max_spice', $itemColumns, true);
+
+    if ($hasBaseSpice) {
+        $selectParts[] = 'i.base_spice';
+    } else {
+        $selectParts[] = 'NULL AS base_spice';
+    }
+
+    if ($hasMinSpice) {
+        $selectParts[] = 'i.min_spice';
+    }
+
+    if ($hasMaxSpice) {
+        $selectParts[] = 'i.max_spice';
+    }
+
+    $hasCourseId = in_array('course_id', $itemColumns, true);
+    $courseJoin = '';
+    $courseSlugSelect = 'NULL AS course_slug';
+    $courseLabelSelect = "'' AS course_label";
+
+    if ($hasCourseId && db_table_exists($pdo, 'courses')) {
+        $courseColumns = db_table_columns($pdo, 'courses');
+
+        if (in_array('id', $courseColumns, true)) {
+            if (in_array('slug', $courseColumns, true)) {
+                $courseSlugSelect = 'c.slug AS course_slug';
+            }
+
+            if (in_array('label', $courseColumns, true)) {
+                $courseLabelSelect = 'c.label AS course_label';
+            }
+
+            $courseJoin = ' INNER JOIN courses c ON c.id = i.course_id';
+        }
+    }
+
+    $selectParts[] = $courseSlugSelect;
+    $selectParts[] = $courseLabelSelect;
+
+    $itemsSql = 'SELECT ' . implode(', ', $selectParts) . ' FROM items i' . $courseJoin;
+
+    $conditions = [];
+    if (in_array('enabled', $itemColumns, true)) {
+        $conditions[] = 'i.enabled = 1';
+    }
+
+    if (!empty($conditions)) {
+        $itemsSql .= ' WHERE ' . implode(' AND ', $conditions);
+    }
+
+    if (in_array('name', $itemColumns, true)) {
+        $itemsSql .= ' ORDER BY i.name';
+    } else {
+        $itemsSql .= ' ORDER BY id';
+    }
+
+    try {
+        $itemsStmt = $pdo->query($itemsSql);
+        if ($itemsStmt !== false) {
+            $items = $itemsStmt->fetchAll();
+        }
+    } catch (Throwable $e) {
+        $items = [];
+    }
+}
+
+$proteinMap = [];
+if (db_table_exists($pdo, 'item_allowed_proteins') && db_table_exists($pdo, 'proteins')) {
+    try {
+        $proteinStmt = $pdo->query('SELECT iap.item_id, p.slug, p.label FROM item_allowed_proteins iap INNER JOIN proteins p ON p.id = iap.protein_id');
+        if ($proteinStmt !== false) {
+            foreach ($proteinStmt->fetchAll() as $row) {
+                if (empty($row['item_id']) || empty($row['slug'])) {
+                    continue;
+                }
+
+                $proteinMap[(int)$row['item_id']][] = [
+                    'slug'  => (string)$row['slug'],
+                    'label' => isset($row['label']) && $row['label'] !== '' ? (string)$row['label'] : (string)$row['slug'],
+                ];
+            }
+        }
+    } catch (Throwable $e) {
+        $proteinMap = [];
+    }
+}
+
+$courseFilter = array_values(array_filter($preferences['courses'], static function ($value) {
+    return $value !== null && $value !== '';
+}));
+$courseFilter = array_values(array_unique($courseFilter));
+$proteinFilter = array_values(array_filter($preferences['proteins'], static function ($value) {
+    return $value !== null && $value !== '';
+}));
+$proteinFilter = array_values(array_unique($proteinFilter));
+$maxSpice = (int)$preferences['max_spice'];
+
+$filteredItems = [];
+foreach ($items as $item) {
+    $itemId = isset($item['id']) ? (int)$item['id'] : null;
+    $itemCourseSlug = isset($item['course_slug']) && $item['course_slug'] !== '' ? (string)$item['course_slug'] : null;
+
+    if (!empty($courseFilter) && $itemCourseSlug !== null && !in_array($itemCourseSlug, $courseFilter, true)) {
+        continue;
+    }
+
+    $itemProteinList = $itemId !== null && isset($proteinMap[$itemId]) ? $proteinMap[$itemId] : null;
+    if (!empty($proteinFilter)) {
+        if (is_array($itemProteinList) && !empty($itemProteinList)) {
+            $itemProteinSlugs = array_map('strval', array_column($itemProteinList, 'slug'));
+            if (!array_intersect($itemProteinSlugs, $proteinFilter)) {
+                continue;
+            }
+        } elseif (is_array($itemProteinList) && empty($itemProteinList)) {
+            continue;
+        }
+    }
+
+    $itemSpice = null;
+    if (isset($item['base_spice']) && is_numeric($item['base_spice'])) {
+        $itemSpice = (int)$item['base_spice'];
+    } elseif (isset($item['min_spice'], $item['max_spice']) && is_numeric($item['min_spice']) && is_numeric($item['max_spice'])) {
+        $itemSpice = (int)round(((int)$item['min_spice'] + (int)$item['max_spice']) / 2);
+    }
+
+    if ($itemSpice !== null && $itemSpice > $maxSpice) {
+        continue;
+    }
+
+    $normalisedProteins = [];
+    if (is_array($itemProteinList)) {
+        foreach ($itemProteinList as $protein) {
+            if (empty($protein['slug'])) {
+                continue;
+            }
+
+            $slug = (string)$protein['slug'];
+            $normalisedProteins[] = [
+                'slug'  => $slug,
+                'label' => isset($protein['label']) && $protein['label'] !== '' ? (string)$protein['label'] : ($proteinLabels[$slug] ?? $slug),
+            ];
+        }
+    }
+
+    $courseLabel = 'Any course';
+    if ($itemCourseSlug !== null && isset($courseLabels[$itemCourseSlug])) {
+        $courseLabel = $courseLabels[$itemCourseSlug];
+    } elseif (isset($item['course_label']) && $item['course_label'] !== '') {
+        $courseLabel = (string)$item['course_label'];
+    }
+
+    $filteredItems[] = [
+        'id'           => $itemId,
+        'name'         => isset($item['name']) && $item['name'] !== '' ? (string)$item['name'] : 'Mystery dish',
+        'description'  => isset($item['description']) ? (string)$item['description'] : '',
+        'image_path'   => isset($item['image_path']) && $item['image_path'] !== '' ? (string)$item['image_path'] : null,
+        'course_slug'  => $itemCourseSlug,
+        'course_label' => $courseLabel,
+        'proteins'     => $normalisedProteins,
+        'base_spice'   => $itemSpice !== null ? max(0, min(5, (int)$itemSpice)) : 0,
+    ];
     $courseLabels[$course['slug']] = $course['label'];
 }
 $proteinLabels = [];

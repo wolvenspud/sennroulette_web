@@ -539,6 +539,12 @@ h1 {
   gap: 12px;
 }
 
+.preferences-empty {
+  color: rgba(255, 255, 255, 0.6);
+  font-style: italic;
+  margin-top: 8px;
+}
+
 .pref-checkbox {
   background: rgba(255, 255, 255, 0.06);
   border-radius: 12px;
