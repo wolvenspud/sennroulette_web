@@ -38,6 +38,14 @@ $pdo->exec('PRAGMA foreign_keys = ON');
 
 function migrate(PDO $pdo): void {
 
+    $pdo->exec('CREATE TABLE IF NOT EXISTS users (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        username   TEXT NOT NULL UNIQUE,
+        password   TEXT NOT NULL,
+        is_admin   INTEGER NOT NULL DEFAULT 0 CHECK (is_admin IN (0,1)),
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )');
+
     // Courses (mains/appetisers)
 
     $pdo->exec('CREATE TABLE IF NOT EXISTS courses (
@@ -112,6 +120,15 @@ function migrate(PDO $pdo): void {
 
         FOREIGN KEY (protein_id) REFERENCES proteins(id) ON DELETE RESTRICT
 
+    )');
+
+
+
+    $pdo->exec('CREATE TABLE IF NOT EXISTS user_preferences (
+        user_id      INTEGER PRIMARY KEY,
+        filters_json TEXT NOT NULL,
+        updated_at   TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     )');
 
 

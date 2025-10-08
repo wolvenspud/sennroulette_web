@@ -13,6 +13,7 @@
 <body>
 <header>
   <a class="btn" href="/index.php">Home</a>
+  <a class="btn" href="/preferences.php">Preferences</a>
   <?php if (!empty($_SESSION['uid'])): ?>
     <?php if (!empty($_SESSION['is_admin'])): ?>
       <a class="btn" href="/admin/admin.php">Admin</a>
