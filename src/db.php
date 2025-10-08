@@ -159,4 +159,67 @@ function migrate(PDO $pdo): void {
 
 migrate($pdo);
 
+/**
+ * Determine if a table exists in the current SQLite database.
+ */
+function db_table_exists(PDO $pdo, string $table): bool
+{
+    static $cache = [];
+
+    if (isset($cache[$table])) {
+        return $cache[$table];
+    }
+
+    try {
+        $stmt = $pdo->prepare('SELECT 1 FROM sqlite_master WHERE type = "table" AND name = ? LIMIT 1');
+        if ($stmt === false) {
+            return $cache[$table] = false;
+        }
+        $stmt->execute([$table]);
+        $cache[$table] = $stmt->fetchColumn() !== false;
+        return $cache[$table];
+    } catch (Throwable $e) {
+        $cache[$table] = false;
+        return false;
+    }
+}
+
+/**
+ * Fetch the column names for a given table. Returns an empty array if the table
+ * cannot be inspected.
+ */
+function db_table_columns(PDO $pdo, string $table): array
+{
+    static $cache = [];
+
+    if (isset($cache[$table])) {
+        return $cache[$table];
+    }
+
+    if (!db_table_exists($pdo, $table)) {
+        $cache[$table] = [];
+        return $cache[$table];
+    }
+
+    $columns = [];
+
+    try {
+        $identifier = str_replace('"', '""', $table);
+        $stmt = $pdo->query('PRAGMA table_info("' . $identifier . '")');
+        if ($stmt !== false) {
+            foreach ($stmt as $row) {
+                if (isset($row['name'])) {
+                    $columns[] = $row['name'];
+                }
+            }
+        }
+    } catch (Throwable $e) {
+        $columns = [];
+    }
+
+    $cache[$table] = $columns;
+
+    return $columns;
+}
+
 
