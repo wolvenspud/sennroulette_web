@@ -593,6 +593,7 @@ include __DIR__ . '/header.php';
                   <div class="lootbox-item-text">
                     <strong><?= htmlspecialchars($item['name']) ?></strong>
                     <span><?= htmlspecialchars($item['course_label']) ?></span>
+                    <div class="lootbox-item-roll" hidden></div>
                   </div>
                 </div>
               <?php endforeach; ?>
@@ -603,18 +604,6 @@ include __DIR__ . '/header.php';
         <button class="spin-button" id="spin-button">Spin the wheel</button>
       </div>
 
-      <div class="lootbox-result" id="lootbox-result">
-        <div class="lootbox-result-media">
-          <img id="lootbox-result-image" alt="" hidden>
-          <div class="lootbox-result-placeholder" id="lootbox-result-placeholder" aria-hidden="true"></div>
-        </div>
-        <div class="lootbox-result-content">
-          <h2 id="lootbox-result-title">Ready when you are</h2>
-          <div class="lootbox-meta" id="lootbox-result-meta"></div>
-          <div class="lootbox-options" id="lootbox-result-options" hidden></div>
-          <p class="lootbox-description" id="lootbox-result-description">Hit the button to let the carousel choose a dish.</p>
-        </div>
-      </div>
     <?php endif; ?>
   </div>
 
@@ -709,13 +698,6 @@ include __DIR__ . '/header.php';
       var spinButton = document.getElementById('spin-button');
       var strip = document.getElementById('lootbox-strip');
       var windowEl = document.getElementById('lootbox-window');
-      var resultTitle = document.getElementById('lootbox-result-title');
-      var resultMeta = document.getElementById('lootbox-result-meta');
-      var resultDescription = document.getElementById('lootbox-result-description');
-      var resultImage = document.getElementById('lootbox-result-image');
-      var resultPlaceholder = document.getElementById('lootbox-result-placeholder');
-      var resultOptions = document.getElementById('lootbox-result-options');
-
       if (!spinButton || !strip || !windowEl || lootboxItems.length === 0) {
         if (spinButton) {
           spinButton.disabled = true;
@@ -726,10 +708,90 @@ include __DIR__ . '/header.php';
       var activeCard = null;
       var totalItems = lootboxItems.length;
       var currentLoop = 1;
+
+      function clearCardRoll(card) {
+        if (!card) {
+          return;
+        }
+        var rollEl = card.querySelector('.lootbox-item-roll');
+        if (rollEl) {
+          rollEl.textContent = '';
+          rollEl.setAttribute('hidden', 'hidden');
+        }
+      }
+
+      function resetCardState(card) {
+        if (!card) {
+          return;
+        }
+        card.classList.remove('active');
+        clearCardRoll(card);
+      }
+
+      function applyRollToCard(card, item) {
+        if (!card || !item) {
+          return;
+        }
+        var rollEl = card.querySelector('.lootbox-item-roll');
+        if (!rollEl) {
+          return;
+        }
+        var roll = rollItemDetails(item);
+        var parts = [];
+        if (roll && roll.protein) {
+          var proteinLabel = roll.protein.label || roll.protein.value || '';
+          if (proteinLabel) {
+            parts.push('Protein: ' + proteinLabel);
+          }
+        }
+        if (roll && Array.isArray(roll.options)) {
+          roll.options.forEach(function (selection) {
+            if (!selection || !selection.name || !selection.values || !selection.values.length) {
+              return;
+            }
+            var valueText = selection.values
+              .map(function (value) {
+                if (!value) {
+                  return '';
+                }
+                return value.label || value.value || '';
+              })
+              .filter(function (value) {
+                return value !== '';
+              })
+              .join(', ');
+            if (!valueText) {
+              return;
+            }
+            parts.push(selection.name + ': ' + valueText);
+          });
+        }
+        if (!parts.length) {
+          rollEl.textContent = '';
+          rollEl.setAttribute('hidden', 'hidden');
+          return;
+        }
+        if (parts.length > 3) {
+          parts = parts.slice(0, 3);
+        }
+        rollEl.textContent = parts.join(' • ');
+        rollEl.removeAttribute('hidden');
+      }
+
+      function deactivateCard(card) {
+        if (!card) {
+          return;
+        }
+        card.classList.remove('active');
+        clearCardRoll(card);
+      }
+
       var templateCards = Array.prototype.map.call(
         strip.querySelectorAll('.lootbox-item[data-loop="0"]'),
         function (card) {
-          return card.cloneNode(true);
+          var clone = card.cloneNode(true);
+          resetCardState(clone);
+          return clone;
         }
       );
       if (templateCards.length === 0) {
@@ -738,10 +800,16 @@ include __DIR__ . '/header.php';
           function (card) {
             var clone = card.cloneNode(true);
             clone.setAttribute('data-loop', '0');
+            var originalIndex = card.getAttribute('data-index');
+            if (originalIndex !== null) {
+              clone.setAttribute('data-index', originalIndex);
+            }
+            resetCardState(clone);
             return clone;
           }
         );
       }
+      templateCards.forEach(resetCardState);
 
       var lowestLoop = 0;
       var highestLoop = 0;
@@ -781,8 +849,14 @@ include __DIR__ . '/header.php';
         for (var j = 0; j < templateCards.length; j++) {
           var template = templateCards[j];
           var clone = template.cloneNode(true);
+          var originalIndex = template.getAttribute('data-index');
           clone.setAttribute('data-loop', String(loopIndex));
-          clone.setAttribute('data-index', String(j));
+          if (originalIndex !== null) {
+            clone.setAttribute('data-index', originalIndex);
+          } else {
+            clone.removeAttribute('data-index');
+          }
+          resetCardState(clone);
           fragment.appendChild(clone);
         }
         strip.appendChild(fragment);
@@ -870,110 +944,12 @@ include __DIR__ . '/header.php';
         recomputeLoopBounds();
       }
 
-      function updateResult(item) {
-        if (!item) {
-          return;
-        }
-
-        var rolled = rollItemDetails(item);
-
-        if (resultTitle) {
-          resultTitle.textContent = item.name;
-        }
-
-        if (resultDescription) {
-          resultDescription.textContent = item.description || 'No description available yet.';
-        }
-
-        if (resultImage) {
-          if (item.imagePath) {
-            resultImage.src = item.imagePath;
-            resultImage.alt = item.name;
-            resultImage.removeAttribute('hidden');
-            if (resultPlaceholder) {
-              resultPlaceholder.setAttribute('hidden', 'hidden');
-            }
-          } else {
-            resultImage.setAttribute('hidden', 'hidden');
-            resultImage.removeAttribute('src');
-            resultImage.alt = '';
-            if (resultPlaceholder) {
-              resultPlaceholder.removeAttribute('hidden');
-            }
-          }
-        }
-
-        if (resultMeta) {
-          resultMeta.innerHTML = '';
-          var badges = [item.courseLabel, 'Spice: ' + item.baseSpice + '/5'];
-
-          if (rolled.protein) {
-            badges.push('Protein: ' + rolled.protein.label);
-          }
-
-          if (Array.isArray(rolled.options)) {
-            rolled.options.forEach(function (selection) {
-              if (selection && selection.name && selection.values && selection.values.length) {
-                var joined = selection.values.map(function (value) {
-                  return value.label || value.value || '';
-                }).join(', ');
-                if (/noodle/i.test(selection.name)) {
-                  badges.push(selection.name + ': ' + joined);
-                }
-              }
-            });
-          }
-
-          badges.forEach(function (text) {
-            if (!text) {
-              return;
-            }
-            var badge = document.createElement('span');
-            badge.textContent = text;
-            resultMeta.appendChild(badge);
-          });
-        }
-
-        if (resultOptions) {
-          resultOptions.innerHTML = '';
-
-          if (Array.isArray(rolled.options) && rolled.options.length) {
-            rolled.options.forEach(function (selection) {
-              if (!selection || !selection.name || !selection.values || !selection.values.length) {
-                return;
-              }
-
-              var row = document.createElement('div');
-              row.className = 'lootbox-option-row';
-
-              var nameEl = document.createElement('span');
-              nameEl.className = 'lootbox-option-name';
-              nameEl.textContent = selection.name;
-
-              var valueEl = document.createElement('span');
-              valueEl.className = 'lootbox-option-value';
-              valueEl.textContent = selection.values.map(function (value) {
-                return value.label || value.value || '';
-              }).join(', ');
-
-              row.appendChild(nameEl);
-              row.appendChild(valueEl);
-              resultOptions.appendChild(row);
-            });
-
-            resultOptions.removeAttribute('hidden');
-          } else {
-            resultOptions.setAttribute('hidden', 'hidden');
-          }
-        }
-      }
-
       // Prime the strip so the first item is centred.
       var initialCard = centerCard(currentLoop, 0, false, 0);
       activeCard = initialCard;
       if (initialCard) {
         initialCard.classList.add('active');
-        updateResult(lootboxItems[0]);
+        applyRollToCard(initialCard, lootboxItems[0]);
       }
 
       spinButton.addEventListener('click', function () {
@@ -1025,12 +1001,12 @@ include __DIR__ . '/header.php';
 
         setTimeout(function () {
           if (activeCard) {
-            activeCard.classList.remove('active');
+            deactivateCard(activeCard);
           }
           landingCard.classList.add('active');
+          applyRollToCard(landingCard, lootboxItems[targetIndex]);
           activeCard = landingCard;
           currentLoop = targetLoop;
-          updateResult(lootboxItems[targetIndex]);
           spinButton.disabled = false;
           normaliseAfterSpin();
         }, duration + 120);
