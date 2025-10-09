@@ -10,113 +10,6 @@ $courses = fetch_course_options($pdo);
 $proteins = fetch_protein_options($pdo);
 $preferences = load_preferences($pdo, $userId, $courses, $proteins);
 
-if (!function_exists('slugify_item_key')) {
-    function slugify_item_key($value)
-    {
-        $value = strtolower(trim((string)$value));
-        $value = str_replace(['\\', '/'], '_', $value);
-        $value = preg_replace('/[^a-z0-9_\-]+/i', '_', $value);
-        return trim($value, '_-');
-    }
-}
-
-if (!function_exists('resolve_item_image_url')) {
-    function resolve_item_image_url(array $item)
-    {
-        $publicRoot = __DIR__;
-        $extensions = ['webp', 'jpg', 'jpeg', 'png'];
-        $rawInputs = [];
-
-        if (!empty($item['image_path'])) {
-            $rawInputs[] = (string)$item['image_path'];
-        }
-
-        if (!empty($item['slug'])) {
-            $rawInputs[] = (string)$item['slug'];
-        }
-
-        if (!empty($item['name'])) {
-            $rawInputs[] = slugify_item_key($item['name']);
-        }
-
-        $seen = [];
-
-        foreach ($rawInputs as $raw) {
-            $raw = trim((string)$raw);
-            if ($raw === '' || isset($seen[$raw])) {
-                continue;
-            }
-            $seen[$raw] = true;
-
-            if (preg_match('#^https?://#i', $raw)) {
-                return $raw;
-            }
-
-            $normalised = str_replace('\\', '/', $raw);
-            $normalised = preg_replace('#^public/#i', '', $normalised);
-            $normalised = preg_replace('#^/?storage/(?:app/)?public/#i', '', $normalised);
-            $normalised = trim($normalised, '/');
-
-            if ($normalised === '') {
-                continue;
-            }
-
-            if (strpos($normalised, 'drawable/') === 0) {
-                $normalised = substr($normalised, strlen('drawable/'));
-            }
-
-            $pathCandidate = $normalised;
-
-            if (strpos($pathCandidate, 'img/') === 0) {
-                $relativePath = '/' . $pathCandidate;
-                $fsPath = $publicRoot . $relativePath;
-                if (is_file($fsPath)) {
-                    return $relativePath;
-                }
-                $pathCandidate = basename($pathCandidate);
-            } elseif (strpos($pathCandidate, 'items/') === 0) {
-                $relativePath = '/img/' . $pathCandidate;
-                $fsPath = $publicRoot . $relativePath;
-                if (is_file($fsPath)) {
-                    return $relativePath;
-                }
-                $pathCandidate = basename($pathCandidate);
-            } elseif (strpos($pathCandidate, 'images/') === 0) {
-                $relativePath = '/img/' . $pathCandidate;
-                $fsPath = $publicRoot . $relativePath;
-                if (is_file($fsPath)) {
-                    return $relativePath;
-                }
-                $pathCandidate = basename($pathCandidate);
-            }
-
-            if (preg_match('#\.(png|jpe?g|webp)$#i', $pathCandidate)) {
-                $relativePath = '/' . $normalised;
-                $fsPath = $publicRoot . $relativePath;
-                if (is_file($fsPath)) {
-                    return $relativePath;
-                }
-                $pathCandidate = pathinfo($pathCandidate, PATHINFO_FILENAME);
-            }
-
-            $slug = slugify_item_key($pathCandidate);
-            if ($slug === '') {
-                continue;
-            }
-
-            foreach ($extensions as $extension) {
-                $relativePath = '/img/items/' . $slug . '.' . $extension;
-                $fsPath = $publicRoot . $relativePath;
-                if (is_file($fsPath)) {
-                    return $relativePath;
-                }
-            }
-        }
-
-        return null;
-    }
-}
-
 $courseLabels = [];
 foreach ($courses as $course) {
     if (!isset($course['slug'])) {
@@ -150,8 +43,6 @@ if (!empty($itemColumns)) {
         in_array('name', $itemColumns, true) ? 'i.name' : "'' AS name",
         in_array('description', $itemColumns, true) ? 'i.description' : "'' AS description",
         in_array('image_path', $itemColumns, true) ? 'i.image_path' : 'NULL AS image_path',
-        in_array('noodle_type', $itemColumns, true) ? 'i.noodle_type' : "'' AS noodle_type",
-        in_array('slug', $itemColumns, true) ? 'i.slug AS slug' : "'' AS slug",
     ];
 
     $hasBaseSpice = in_array('base_spice', $itemColumns, true);
@@ -308,218 +199,76 @@ foreach ($items as $item) {
         $courseLabel = (string)$item['course_label'];
     }
 
-    $noodleType = '';
-    if (isset($item['noodle_type']) && is_string($item['noodle_type'])) {
-        $noodleType = trim((string)$item['noodle_type']);
-    }
-
     $filteredItems[] = [
         'id'           => $itemId,
         'name'         => isset($item['name']) && $item['name'] !== '' ? (string)$item['name'] : 'Mystery dish',
         'description'  => isset($item['description']) ? (string)$item['description'] : '',
         'image_path'   => isset($item['image_path']) && $item['image_path'] !== '' ? (string)$item['image_path'] : null,
-        'image_url'    => resolve_item_image_url([
-            'image_path' => isset($item['image_path']) ? $item['image_path'] : null,
-            'slug'       => isset($item['slug']) ? $item['slug'] : null,
-            'name'       => isset($item['name']) ? $item['name'] : null,
-        ]),
-        'slug'         => isset($item['slug']) && $item['slug'] !== '' ? (string)$item['slug'] : null,
-        'noodle_type'  => $noodleType,
         'course_slug'  => $itemCourseSlug,
         'course_label' => $courseLabel,
         'proteins'     => $normalisedProteins,
         'base_spice'   => $itemSpice !== null ? max(0, min(5, (int)$itemSpice)) : 0,
     ];
+    $courseLabels[$course['slug']] = $course['label'];
+}
+$proteinLabels = [];
+foreach ($proteins as $protein) {
+    $proteinLabels[$protein['slug']] = $protein['label'];
 }
 
-$itemOptionMap = [];
+$itemsStmt = $pdo->query('SELECT i.id, i.name, i.description, i.image_path, i.base_spice, c.slug AS course_slug, c.label AS course_label
+    FROM items i
+    INNER JOIN courses c ON c.id = i.course_id
+    WHERE i.enabled = 1
+    ORDER BY i.name');
+$items = $itemsStmt->fetchAll();
 
-if (!empty($filteredItems) && db_table_exists($pdo, 'item_options') && db_table_exists($pdo, 'item_option_values')) {
-    $ids = [];
-    foreach ($filteredItems as $filtered) {
-        if (!empty($filtered['id'])) {
-            $ids[] = (int)$filtered['id'];
+$proteinRows = $pdo->query('SELECT iap.item_id, p.slug, p.label FROM item_allowed_proteins iap INNER JOIN proteins p ON p.id = iap.protein_id')->fetchAll();
+$proteinMap = [];
+foreach ($proteinRows as $row) {
+    $proteinMap[(int)$row['item_id']][] = [
+        'slug'  => $row['slug'],
+        'label' => $row['label'],
+    ];
+}
+
+$filteredItems = [];
+foreach ($items as $item) {
+    $itemId = (int)$item['id'];
+    $itemProteins = $proteinMap[$itemId] ?? [];
+    $itemProteinSlugs = array_column($itemProteins, 'slug');
+
+    if (!in_array($item['course_slug'], $preferences['courses'], true)) {
+        continue;
+    }
+
+    if (!empty($preferences['proteins'])) {
+        if (empty($itemProteinSlugs)) {
+            continue;
+        }
+        if (!array_intersect($itemProteinSlugs, $preferences['proteins'])) {
+            continue;
         }
     }
 
-    if (!empty($ids)) {
-        $placeholders = implode(', ', array_fill(0, count($ids), '?'));
-        $optionsSql = 'SELECT io.item_id, io.id AS option_id, io.name AS option_name, io.type, io.required, io.min_select, io.max_select, '
-            . 'io.sort_order, iov.name AS value_name, iov.sort_order AS value_order, iov.enabled '
-            . 'FROM item_options io LEFT JOIN item_option_values iov ON iov.option_id = io.id '
-            . 'WHERE io.item_id IN (' . $placeholders . ') '
-            . 'ORDER BY io.sort_order ASC, io.id ASC, iov.sort_order ASC, iov.id ASC';
-
-        try {
-            $optionsStmt = $pdo->prepare($optionsSql);
-            if ($optionsStmt !== false && $optionsStmt->execute($ids)) {
-                foreach ($optionsStmt->fetchAll() as $row) {
-                    if (empty($row['item_id']) || empty($row['option_id']) || empty($row['option_name'])) {
-                        continue;
-                    }
-
-                    $itemId = (int)$row['item_id'];
-                    $optionId = (int)$row['option_id'];
-                    $optionName = (string)$row['option_name'];
-
-                    if (stripos($optionName, 'spice') !== false) {
-                        continue;
-                    }
-
-                    if (!isset($itemOptionMap[$itemId])) {
-                        $itemOptionMap[$itemId] = [];
-                    }
-
-                    if (!isset($itemOptionMap[$itemId][$optionId])) {
-                        $itemOptionMap[$itemId][$optionId] = [
-                            'id'         => $optionId,
-                            'name'       => $optionName,
-                            'type'       => isset($row['type']) ? (string)$row['type'] : 'choice',
-                            'required'   => !empty($row['required']),
-                            'min_select' => isset($row['min_select']) ? (int)$row['min_select'] : 1,
-                            'max_select' => isset($row['max_select']) ? (int)$row['max_select'] : 1,
-                            'values'     => [],
-                        ];
-                    }
-
-                    if (!isset($row['value_name']) || $row['value_name'] === null) {
-                        continue;
-                    }
-
-                    if (isset($row['enabled']) && (int)$row['enabled'] === 0) {
-                        continue;
-                    }
-
-                    $valueName = (string)$row['value_name'];
-
-                    $itemOptionMap[$itemId][$optionId]['values'][] = $valueName;
-                }
-            }
-        } catch (Throwable $e) {
-            $itemOptionMap = [];
-        }
+    if ((int)$item['base_spice'] > (int)$preferences['max_spice']) {
+        continue;
     }
+
+    $item['proteins'] = $itemProteins;
+    $filteredItems[] = $item;
 }
 
 $clientItems = [];
 foreach ($filteredItems as $item) {
-    $clientProteins = [];
-    foreach ($item['proteins'] as $protein) {
-        if (empty($protein['slug'])) {
-            continue;
-        }
-
-        $clientProteins[] = [
-            'slug'  => (string)$protein['slug'],
-            'label' => isset($protein['label']) && $protein['label'] !== '' ? (string)$protein['label'] : (string)$protein['slug'],
-        ];
-    }
-
-    $matchedProteins = [];
-    foreach ($clientProteins as $protein) {
-        if (empty($proteinFilter) || in_array($protein['slug'], $proteinFilter, true)) {
-            $matchedProteins[] = $protein;
-        }
-    }
-
-    $imageUrl = null;
-    if (!empty($item['image_url'])) {
-        $imageUrl = (string)$item['image_url'];
-    }
-
-    $itemOptions = [];
-    $noodleOptions = [];
-
-    if (!empty($item['id']) && isset($itemOptionMap[$item['id']])) {
-        foreach ($itemOptionMap[$item['id']] as $option) {
-            if (empty($option['values'])) {
-                continue;
-            }
-
-            $values = [];
-            foreach ($option['values'] as $value) {
-                $valueString = (string)$value;
-                $values[] = [
-                    'value' => $valueString,
-                    'label' => ucwords(str_replace(['_', '-'], ' ', $valueString)),
-                ];
-            }
-
-            if (empty($values)) {
-                continue;
-            }
-
-            $optionName = (string)$option['name'];
-
-            if (stripos($optionName, 'noodle') !== false) {
-                $noodleOptions = $values;
-            }
-
-            $itemOptions[] = [
-                'id'        => $option['id'],
-                'name'      => $optionName,
-                'type'      => (string)$option['type'],
-                'required'  => !empty($option['required']),
-                'minSelect' => isset($option['min_select']) ? (int)$option['min_select'] : 1,
-                'maxSelect' => isset($option['max_select']) ? (int)$option['max_select'] : 1,
-                'values'    => $values,
-            ];
-        }
-    }
-
-    if (empty($noodleOptions) && !empty($item['noodle_type'])) {
-        $raw = (string)$item['noodle_type'];
-        if ($raw !== '' && strtolower($raw) !== 'na') {
-            $parts = preg_split('/[|,]/', $raw);
-            if (is_array($parts)) {
-                $seen = [];
-                foreach ($parts as $part) {
-                    $slug = trim((string)$part);
-                    if ($slug === '' || isset($seen[$slug])) {
-                        continue;
-                    }
-                    $seen[$slug] = true;
-                    $noodleOptions[] = [
-                        'value' => $slug,
-                        'label' => ucwords(str_replace(['_', '-'], ' ', $slug)),
-                    ];
-                }
-            }
-        }
-    }
-
-    $hasNoodleGroup = false;
-    foreach ($itemOptions as $existingOption) {
-        if (stripos($existingOption['name'], 'noodle') !== false) {
-            $hasNoodleGroup = true;
-            break;
-        }
-    }
-
-    if (!$hasNoodleGroup && !empty($noodleOptions)) {
-        $itemOptions[] = [
-            'id'        => 'noodle-' . ($item['id'] ?? ''),
-            'name'      => 'Noodle choice',
-            'type'      => 'choice',
-            'required'  => true,
-            'minSelect' => 1,
-            'maxSelect' => 1,
-            'values'    => $noodleOptions,
-        ];
-    }
-
     $clientItems[] = [
-        'id'           => $item['id'],
         'name'        => $item['name'],
         'description' => $item['description'] ?? '',
         'courseLabel' => $item['course_label'],
-        'courseSlug'  => $item['course_slug'] ?? '',
-        'proteins'    => $clientProteins,
-        'matchedProteins' => $matchedProteins,
+        'courseSlug'  => $item['course_slug'],
+        'proteins'    => $item['proteins'],
         'baseSpice'   => (int)$item['base_spice'],
-        'imagePath'   => $imageUrl,
-        'slug'        => $item['slug'],
-        'optionGroups' => $itemOptions,
+        'imagePath'   => $item['image_path'] ?? null,
     ];
 }
 
@@ -528,27 +277,8 @@ if ($itemsJson === false) {
     $itemsJson = '[]';
 }
 
-$selectedCourseLabels = [];
-if (!empty($courseFilter)) {
-    foreach ($courseFilter as $slug) {
-        $selectedCourseLabels[] = $courseLabels[$slug] ?? $slug;
-    }
-}
-if (empty($selectedCourseLabels)) {
-    $selectedCourseLabels[] = 'All courses';
-}
-$selectedCourseLabels = array_values(array_unique($selectedCourseLabels));
-
-$selectedProteinLabels = [];
-if (!empty($proteinFilter)) {
-    foreach ($proteinFilter as $slug) {
-        $selectedProteinLabels[] = $proteinLabels[$slug] ?? $slug;
-    }
-}
-if (empty($selectedProteinLabels)) {
-    $selectedProteinLabels[] = 'All proteins';
-}
-$selectedProteinLabels = array_values(array_unique($selectedProteinLabels));
+$selectedCourseLabels = array_map(fn ($slug) => $courseLabels[$slug] ?? $slug, $preferences['courses']);
+$selectedProteinLabels = array_map(fn ($slug) => $proteinLabels[$slug] ?? $slug, $preferences['proteins']);
 
 include __DIR__ . '/header.php';
 ?>
@@ -573,24 +303,9 @@ include __DIR__ . '/header.php';
           <div class="lootbox-strip" id="lootbox-strip">
             <?php for ($loop = 0; $loop < 3; $loop++): ?>
               <?php foreach ($filteredItems as $index => $item): ?>
-                <?php
-                  $cardImage = null;
-                  if (!empty($item['image_url'])) {
-                      $cardImage = (string)$item['image_url'];
-                  }
-                ?>
                 <div class="lootbox-item" data-loop="<?= $loop ?>" data-index="<?= $index ?>">
-                  <div class="lootbox-thumb">
-                    <?php if ($cardImage !== null): ?>
-                      <img src="<?= htmlspecialchars($cardImage) ?>" alt="<?= htmlspecialchars($item['name']) ?>">
-                    <?php else: ?>
-                      <div class="lootbox-thumb-fallback" aria-hidden="true"></div>
-                    <?php endif; ?>
-                  </div>
-                  <div class="lootbox-item-text">
-                    <strong><?= htmlspecialchars($item['name']) ?></strong>
-                    <span><?= htmlspecialchars($item['course_label']) ?></span>
-                  </div>
+                  <strong><?= htmlspecialchars($item['name']) ?></strong>
+                  <span><?= htmlspecialchars($item['course_label']) ?></span>
                 </div>
               <?php endforeach; ?>
             <?php endfor; ?>
@@ -601,16 +316,9 @@ include __DIR__ . '/header.php';
       </div>
 
       <div class="lootbox-result" id="lootbox-result">
-        <div class="lootbox-result-media">
-          <img id="lootbox-result-image" alt="" hidden>
-          <div class="lootbox-result-placeholder" id="lootbox-result-placeholder" aria-hidden="true"></div>
-        </div>
-        <div class="lootbox-result-content">
-          <h2 id="lootbox-result-title">Ready when you are</h2>
-          <div class="lootbox-meta" id="lootbox-result-meta"></div>
-          <div class="lootbox-options" id="lootbox-result-options" hidden></div>
-          <p class="lootbox-description" id="lootbox-result-description">Hit the button to let the carousel choose a dish.</p>
-        </div>
+        <h2 id="lootbox-result-title">Ready when you are</h2>
+        <div class="lootbox-meta" id="lootbox-result-meta"></div>
+        <p class="lootbox-description" id="lootbox-result-description">Hit the button to let the carousel choose a dish.</p>
       </div>
     <?php endif; ?>
   </div>
@@ -618,100 +326,20 @@ include __DIR__ . '/header.php';
   <script>
     const lootboxItems = <?= $itemsJson ?>;
 
-    function pickProtein(item) {
-      var eligible = [];
-      if (item && Array.isArray(item.matchedProteins) && item.matchedProteins.length > 0) {
-        eligible = item.matchedProteins.slice();
-      } else if (item && Array.isArray(item.proteins)) {
-        eligible = item.proteins.slice();
+    function formatProteins(proteins) {
+      if (!Array.isArray(proteins) || proteins.length === 0) {
+        return 'Flexible protein';
       }
-      if (!eligible.length) {
-        return null;
-      }
-      var index = Math.floor(Math.random() * eligible.length);
-      return eligible[index] || null;
+      return proteins.map((p) => p.label).join(', ');
     }
 
-    function rollOptionSelections(optionGroups) {
-      if (!Array.isArray(optionGroups)) {
-        return [];
-      }
-      var selections = [];
-      optionGroups.forEach(function (group) {
-        if (!group || !Array.isArray(group.values) || group.values.length === 0) {
-          return;
-        }
-
-        var values = group.values.slice();
-        var min = typeof group.minSelect === 'number' ? group.minSelect : (group.required ? 1 : 0);
-        var max = typeof group.maxSelect === 'number' && group.maxSelect > 0 ? group.maxSelect : values.length;
-
-        if (min < 0) {
-          min = 0;
-        }
-        if (max < min) {
-          max = min;
-        }
-        if (max > values.length) {
-          max = values.length;
-        }
-        if (min > values.length) {
-          min = values.length;
-        }
-
-        var count = min;
-        if (max > min) {
-          count = min + Math.floor(Math.random() * (max - min + 1));
-        }
-        if (count === 0 && group.required && values.length > 0) {
-          count = 1;
-        }
-
-        var pool = values.slice();
-        var picks = [];
-        while (picks.length < count && pool.length > 0) {
-          var idx = Math.floor(Math.random() * pool.length);
-          var choice = pool.splice(idx, 1)[0];
-          if (choice) {
-            picks.push(choice);
-          }
-        }
-
-        if (!picks.length && group.required && values.length > 0) {
-          picks.push(values[0]);
-        }
-
-        if (picks.length) {
-          selections.push({
-            name: group.name || 'Option',
-            values: picks
-          });
-        }
-      });
-
-      return selections;
-    }
-
-    function rollItemDetails(item) {
-      var protein = pickProtein(item);
-      var options = rollOptionSelections(item ? item.optionGroups : []);
-
-      return {
-        protein: protein,
-        options: options
-      };
-    }
-
-    document.addEventListener('DOMContentLoaded', function () {
-      var spinButton = document.getElementById('spin-button');
-      var strip = document.getElementById('lootbox-strip');
-      var windowEl = document.getElementById('lootbox-window');
-      var resultTitle = document.getElementById('lootbox-result-title');
-      var resultMeta = document.getElementById('lootbox-result-meta');
-      var resultDescription = document.getElementById('lootbox-result-description');
-      var resultImage = document.getElementById('lootbox-result-image');
-      var resultPlaceholder = document.getElementById('lootbox-result-placeholder');
-      var resultOptions = document.getElementById('lootbox-result-options');
+    document.addEventListener('DOMContentLoaded', () => {
+      const spinButton = document.getElementById('spin-button');
+      const strip = document.getElementById('lootbox-strip');
+      const windowEl = document.getElementById('lootbox-window');
+      const resultTitle = document.getElementById('lootbox-result-title');
+      const resultMeta = document.getElementById('lootbox-result-meta');
+      const resultDescription = document.getElementById('lootbox-result-description');
 
       if (!spinButton || !strip || !windowEl || lootboxItems.length === 0) {
         if (spinButton) {
@@ -720,316 +348,87 @@ include __DIR__ . '/header.php';
         return;
       }
 
-      var activeCard = null;
-      var totalItems = lootboxItems.length;
-      var currentLoop = 1;
-      var templateCards = Array.prototype.map.call(
-        strip.querySelectorAll('.lootbox-item[data-loop="0"]'),
-        function (card) {
-          return card.cloneNode(true);
-        }
-      );
-      if (templateCards.length === 0) {
-        templateCards = Array.prototype.map.call(
-          strip.querySelectorAll('.lootbox-item[data-index]'),
-          function (card) {
-            var clone = card.cloneNode(true);
-            clone.setAttribute('data-loop', '0');
-            return clone;
-          }
-        );
-      }
+      let activeCard = null;
 
-      var lowestLoop = 0;
-      var highestLoop = 0;
-
-      function recomputeLoopBounds() {
-        var cards = strip.querySelectorAll('.lootbox-item');
-        if (cards.length === 0) {
-          lowestLoop = 0;
-          highestLoop = 0;
-          return;
-        }
-        var minLoop = Number.POSITIVE_INFINITY;
-        var maxLoop = Number.NEGATIVE_INFINITY;
-        for (var i = 0; i < cards.length; i++) {
-          var loopValue = parseInt(cards[i].getAttribute('data-loop') || '0', 10);
-          if (loopValue < minLoop) {
-            minLoop = loopValue;
-          }
-          if (loopValue > maxLoop) {
-            maxLoop = loopValue;
-          }
-        }
-        if (!isFinite(minLoop) || !isFinite(maxLoop)) {
-          lowestLoop = 0;
-          highestLoop = 0;
-          return;
-        }
-        lowestLoop = minLoop;
-        highestLoop = maxLoop;
-      }
-
-      function addLoop(loopIndex) {
-        if (!templateCards.length) {
-          return;
-        }
-        var fragment = document.createDocumentFragment();
-        for (var j = 0; j < templateCards.length; j++) {
-          var template = templateCards[j];
-          var clone = template.cloneNode(true);
-          clone.setAttribute('data-loop', String(loopIndex));
-          clone.setAttribute('data-index', String(j));
-          fragment.appendChild(clone);
-        }
-        strip.appendChild(fragment);
-        highestLoop = loopIndex;
-      }
-
-      function ensureLoop(loopIndex) {
-        if (!templateCards.length) {
-          return;
-        }
-        while (highestLoop < loopIndex) {
-          addLoop(highestLoop + 1);
-        }
-      }
-
-      function reindexLoops(delta) {
-        if (!delta) {
-          return;
-        }
-        var cards = strip.querySelectorAll('.lootbox-item');
-        for (var i = 0; i < cards.length; i++) {
-          var card = cards[i];
-          var loopValue = parseInt(card.getAttribute('data-loop') || '0', 10);
-          card.setAttribute('data-loop', String(loopValue - delta));
-        }
-        recomputeLoopBounds();
-      }
-
-      function pruneLoops() {
-        var cards = strip.querySelectorAll('.lootbox-item');
-        var removed = false;
-        for (var i = 0; i < cards.length; i++) {
-          var loopValue = parseInt(cards[i].getAttribute('data-loop') || '0', 10);
-          if (loopValue < 0 || loopValue > 3) {
-            if (cards[i].parentNode) {
-              cards[i].parentNode.removeChild(cards[i]);
-            }
-            removed = true;
-          }
-        }
-        if (removed) {
-          recomputeLoopBounds();
-        }
-      }
-
-      function getCard(loopIndex, itemIndex) {
-        return strip.querySelector('.lootbox-item[data-loop="' + loopIndex + '"][data-index="' + itemIndex + '"]');
-      }
-
-      function centerCard(loopIndex, itemIndex, animate, duration) {
-        if (animate === void 0) {
-          animate = false;
-        }
-        if (duration === void 0) {
-          duration = 2200;
-        }
-        var card = getCard(loopIndex, itemIndex);
+      const centerCard = (loopIndex, itemIndex, animate = false, duration = 2200) => {
+        const selector = `.lootbox-item[data-loop="${loopIndex}"][data-index="${itemIndex}"]`;
+        const card = strip.querySelector(selector);
         if (!card) {
           return null;
         }
-        var offset = card.offsetLeft + card.offsetWidth / 2 - windowEl.offsetWidth / 2;
+        const offset = card.offsetLeft + card.offsetWidth / 2 - windowEl.offsetWidth / 2;
         if (!animate) {
           strip.style.transition = 'none';
         } else {
-          strip.style.transition = 'transform ' + duration + 'ms cubic-bezier(0.2, 0.8, 0.1, 1)';
+          strip.style.transition = `transform ${duration}ms cubic-bezier(0.2, 0.8, 0.1, 1)`;
         }
-        strip.style.transform = 'translateX(' + (-offset) + 'px)';
+        strip.style.transform = `translateX(${-offset}px)`;
         return card;
-      }
+      };
 
-      function normaliseAfterSpin() {
-        var delta = currentLoop - 1;
-        if (delta !== 0) {
-          reindexLoops(delta);
-          currentLoop = 1;
-        }
-        pruneLoops();
-        ensureLoop(3);
-        recomputeLoopBounds();
-      }
-
-      recomputeLoopBounds();
-      if (templateCards.length && highestLoop < 2) {
-        ensureLoop(2);
-        recomputeLoopBounds();
-      }
-
-      function updateResult(item) {
+      const updateResult = (item) => {
         if (!item) {
           return;
         }
-
-        var rolled = rollItemDetails(item);
-
         if (resultTitle) {
           resultTitle.textContent = item.name;
         }
-
         if (resultDescription) {
           resultDescription.textContent = item.description || 'No description available yet.';
         }
-
-        if (resultImage) {
-          if (item.imagePath) {
-            resultImage.src = item.imagePath;
-            resultImage.alt = item.name;
-            resultImage.removeAttribute('hidden');
-            if (resultPlaceholder) {
-              resultPlaceholder.setAttribute('hidden', 'hidden');
-            }
-          } else {
-            resultImage.setAttribute('hidden', 'hidden');
-            resultImage.removeAttribute('src');
-            resultImage.alt = '';
-            if (resultPlaceholder) {
-              resultPlaceholder.removeAttribute('hidden');
-            }
-          }
-        }
-
         if (resultMeta) {
           resultMeta.innerHTML = '';
-          var badges = [item.courseLabel, 'Spice: ' + item.baseSpice + '/5'];
-
-          if (rolled.protein) {
-            badges.push('Protein: ' + rolled.protein.label);
-          }
-
-          if (Array.isArray(rolled.options)) {
-            rolled.options.forEach(function (selection) {
-              if (selection && selection.name && selection.values && selection.values.length) {
-                var joined = selection.values.map(function (value) {
-                  return value.label || value.value || '';
-                }).join(', ');
-                if (/noodle/i.test(selection.name)) {
-                  badges.push(selection.name + ': ' + joined);
-                }
-              }
-            });
-          }
-
-          badges.forEach(function (text) {
-            if (!text) {
-              return;
-            }
-            var badge = document.createElement('span');
+          const metaBits = [
+            `${item.courseLabel}`,
+            `Spice: ${item.baseSpice}/5`,
+            `Proteins: ${formatProteins(item.proteins)}`
+          ];
+          metaBits.forEach((text) => {
+            const badge = document.createElement('span');
             badge.textContent = text;
             resultMeta.appendChild(badge);
           });
         }
-
-        if (resultOptions) {
-          resultOptions.innerHTML = '';
-
-          if (Array.isArray(rolled.options) && rolled.options.length) {
-            rolled.options.forEach(function (selection) {
-              if (!selection || !selection.name || !selection.values || !selection.values.length) {
-                return;
-              }
-
-              var row = document.createElement('div');
-              row.className = 'lootbox-option-row';
-
-              var nameEl = document.createElement('span');
-              nameEl.className = 'lootbox-option-name';
-              nameEl.textContent = selection.name;
-
-              var valueEl = document.createElement('span');
-              valueEl.className = 'lootbox-option-value';
-              valueEl.textContent = selection.values.map(function (value) {
-                return value.label || value.value || '';
-              }).join(', ');
-
-              row.appendChild(nameEl);
-              row.appendChild(valueEl);
-              resultOptions.appendChild(row);
-            });
-
-            resultOptions.removeAttribute('hidden');
-          } else {
-            resultOptions.setAttribute('hidden', 'hidden');
-          }
-        }
-      }
+      };
 
       // Prime the strip so the first item is centred.
-      var initialCard = centerCard(currentLoop, 0, false, 0);
+      const initialCard = centerCard(1, 0, false, 0);
       activeCard = initialCard;
       if (initialCard) {
         initialCard.classList.add('active');
         updateResult(lootboxItems[0]);
       }
 
-      spinButton.addEventListener('click', function () {
+      spinButton.addEventListener('click', () => {
         if (spinButton.disabled) {
           return;
         }
         spinButton.disabled = true;
 
-        var targetIndex = Math.floor(Math.random() * lootboxItems.length);
-        var minCards = Math.max(6, totalItems * 2);
-        var loopsNeeded = Math.max(2, Math.ceil(minCards / Math.max(totalItems, 1)));
-        var extraLoops = Math.floor(Math.random() * 3);
-        var passes = loopsNeeded + extraLoops;
-        var targetLoop = currentLoop + passes;
+        const targetIndex = Math.floor(Math.random() * lootboxItems.length);
+        const loopTarget = lootboxItems.length > 1 ? 2 : 1;
+        const duration = 2100 + Math.floor(Math.random() * 500);
 
-        ensureLoop(targetLoop + 1);
-        recomputeLoopBounds();
-        if (targetLoop > highestLoop) {
-          targetLoop = highestLoop;
-        }
-        if (targetLoop <= currentLoop) {
-          targetLoop = currentLoop + 1;
-          if (targetLoop > highestLoop) {
-            targetLoop = highestLoop;
-          }
-        }
-
-        var travelStartLoop = currentLoop;
-        if (getCard(currentLoop - 1, targetIndex)) {
-          travelStartLoop = currentLoop - 1;
-        }
-
-        var effectivePasses = Math.max(1, targetLoop - travelStartLoop);
-        var duration = 1600 + effectivePasses * 240 + Math.floor(Math.random() * 360);
-
+        // Reset to the first loop for a consistent start.
         strip.style.transition = 'none';
-        var startCard = centerCard(travelStartLoop, targetIndex, false, 0);
-        if (!startCard) {
-          spinButton.disabled = false;
-          return;
-        }
+        centerCard(0, targetIndex, false, 0);
+        // Force repaint so the transition kicks in on the next frame.
         void strip.offsetWidth;
 
-        var landingCard = centerCard(targetLoop, targetIndex, true, duration);
+        const landingCard = centerCard(loopTarget, targetIndex, true, duration);
         if (!landingCard) {
           spinButton.disabled = false;
           return;
         }
 
-        setTimeout(function () {
+        setTimeout(() => {
           if (activeCard) {
             activeCard.classList.remove('active');
           }
           landingCard.classList.add('active');
           activeCard = landingCard;
-          currentLoop = targetLoop;
           updateResult(lootboxItems[targetIndex]);
           spinButton.disabled = false;
-          normaliseAfterSpin();
         }, duration + 120);
       });
     });
