@@ -593,8 +593,9 @@ include __DIR__ . '/header.php';
       </div>
     <?php else: ?>
       <div class="lootbox-wrapper">
-        <div class="lootbox-window" id="lootbox-window">
-          <div class="lootbox-strip" id="lootbox-strip">
+        <div class="lootbox-window">
+          <div class="lootbox-viewport" id="lootbox-window">
+            <div class="lootbox-strip" id="lootbox-strip">
             <?php for ($loop = 0; $loop < 3; $loop++): ?>
               <?php foreach ($filteredItems as $index => $item): ?>
                 <?php
@@ -619,10 +620,11 @@ include __DIR__ . '/header.php';
                 </div>
               <?php endforeach; ?>
             <?php endfor; ?>
+            </div>
+            <div class="lootbox-marker"></div>
           </div>
-          <div class="lootbox-marker"></div>
+          <button class="spin-button" id="spin-button">Spin the wheel</button>
         </div>
-        <button class="spin-button" id="spin-button">Spin the wheel</button>
       </div>
 
     <?php endif; ?>
@@ -1029,7 +1031,7 @@ include __DIR__ . '/header.php';
         if (!animate) {
           strip.style.transition = 'none';
         } else {
-          strip.style.transition = 'transform ' + duration + 'ms cubic-bezier(0.2, 0.8, 0.1, 1)';
+          strip.style.transition = 'transform ' + duration + 'ms cubic-bezier(0.12, 0.88, 0.08, 1)';
         }
         strip.style.transform = 'translateX(' + (-offset) + 'px)';
         return card;
@@ -1098,7 +1100,12 @@ include __DIR__ . '/header.php';
         }
 
         var effectivePasses = Math.max(1, targetLoop - travelStartLoop);
-        var duration = 1600 + effectivePasses * 240 + Math.floor(Math.random() * 360);
+        var baseDuration = 1900;
+        var perPassDuration = 320;
+        var spinVariance = 300 + Math.floor(Math.random() * 420);
+        // Add a randomised tail drag so the slowdown lingers unpredictably
+        var tailDrag = 500 + Math.floor(Math.random() * 900);
+        var duration = baseDuration + effectivePasses * perPassDuration + spinVariance + tailDrag;
 
         strip.style.transition = 'none';
         var startCard = centerCard(travelStartLoop, targetIndex, false, 0);
