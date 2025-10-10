@@ -278,11 +278,25 @@ foreach ($items as $item) {
         }
     }
 
+    $minSpiceValue = null;
+    if (isset($item['min_spice']) && is_numeric($item['min_spice'])) {
+        $minSpiceValue = max(0, min(5, (int)$item['min_spice']));
+    }
+
+    $maxSpiceValue = null;
+    if (isset($item['max_spice']) && is_numeric($item['max_spice'])) {
+        $maxSpiceValue = max(0, min(5, (int)$item['max_spice']));
+    }
+
+    if ($minSpiceValue !== null && $maxSpiceValue !== null && $minSpiceValue > $maxSpiceValue) {
+        $maxSpiceValue = $minSpiceValue;
+    }
+
     $itemSpice = null;
     if (isset($item['base_spice']) && is_numeric($item['base_spice'])) {
         $itemSpice = (int)$item['base_spice'];
-    } elseif (isset($item['min_spice'], $item['max_spice']) && is_numeric($item['min_spice']) && is_numeric($item['max_spice'])) {
-        $itemSpice = (int)round(((int)$item['min_spice'] + (int)$item['max_spice']) / 2);
+    } elseif ($minSpiceValue !== null && $maxSpiceValue !== null) {
+        $itemSpice = (int)round(($minSpiceValue + $maxSpiceValue) / 2);
     }
 
     if ($itemSpice !== null && $itemSpice > $maxSpice) {
@@ -331,6 +345,8 @@ foreach ($items as $item) {
         'course_slug'  => $itemCourseSlug,
         'course_label' => $courseLabel,
         'proteins'     => $normalisedProteins,
+        'min_spice'    => $minSpiceValue,
+        'max_spice'    => $maxSpiceValue,
         'base_spice'   => $itemSpice !== null ? max(0, min(5, (int)$itemSpice)) : 0,
     ];
 }
@@ -406,6 +422,9 @@ if (!empty($filteredItems) && db_table_exists($pdo, 'item_options') && db_table_
 
 $clientItems = [];
 foreach ($filteredItems as $item) {
+    $minSpice = array_key_exists('min_spice', $item) && $item['min_spice'] !== null ? max(0, min(5, (int)$item['min_spice'])) : null;
+    $maxSpice = array_key_exists('max_spice', $item) && $item['max_spice'] !== null ? max(0, min(5, (int)$item['max_spice'])) : null;
+
     $clientProteins = [];
     foreach ($item['proteins'] as $protein) {
         if (empty($protein['slug'])) {
@@ -520,6 +539,8 @@ foreach ($filteredItems as $item) {
         'proteins'    => $clientProteins,
         'matchedProteins' => $matchedProteins,
         'baseSpice'   => (int)$item['base_spice'],
+        'minSpice'    => $minSpice,
+        'maxSpice'    => $maxSpice,
         'imagePath'   => $imageUrl,
         'slug'        => $item['slug'],
         'optionGroups' => $itemOptions,
@@ -624,6 +645,54 @@ include __DIR__ . '/header.php';
       return eligible[index] || null;
     }
 
+    function normaliseSpiceValue(value) {
+      if (typeof value === 'number' && isFinite(value)) {
+        return Math.min(5, Math.max(0, Math.round(value)));
+      }
+      if (typeof value === 'string' && value.trim() !== '') {
+        var parsed = parseInt(value, 10);
+        if (!isNaN(parsed)) {
+          return Math.min(5, Math.max(0, parsed));
+        }
+      }
+      return null;
+    }
+
+    function rollSpiceLevel(item) {
+      if (!item) {
+        return null;
+      }
+
+      var min = normaliseSpiceValue(item.minSpice);
+      var max = normaliseSpiceValue(item.maxSpice);
+      var base = normaliseSpiceValue(item.baseSpice);
+
+      if (min !== null && max !== null) {
+        if (max < min) {
+          max = min;
+        }
+        var span = max - min + 1;
+        if (span <= 1) {
+          return min;
+        }
+        return min + Math.floor(Math.random() * span);
+      }
+
+      if (base !== null) {
+        return base;
+      }
+
+      if (min !== null) {
+        return min;
+      }
+
+      if (max !== null) {
+        return max;
+      }
+
+      return null;
+    }
+
     function rollOptionSelections(optionGroups) {
       if (!Array.isArray(optionGroups)) {
         return [];
@@ -674,10 +743,14 @@ include __DIR__ . '/header.php';
         }
 
         if (picks.length) {
-          selections.push({
+          var selection = {
             name: group.name || 'Option',
             values: picks
-          });
+          };
+          if (group && typeof group.name === 'string' && group.name.toLowerCase().indexOf('noodle') !== -1) {
+            selection.isNoodle = true;
+          }
+          selections.push(selection);
         }
       });
 
@@ -687,10 +760,27 @@ include __DIR__ . '/header.php';
     function rollItemDetails(item) {
       var protein = pickProtein(item);
       var options = rollOptionSelections(item ? item.optionGroups : []);
+      var noodleSelection = null;
+      var otherOptions = [];
+
+      if (Array.isArray(options)) {
+        options.forEach(function (selection) {
+          if (!selection) {
+            return;
+          }
+          if (selection.isNoodle && !noodleSelection && Array.isArray(selection.values) && selection.values.length) {
+            noodleSelection = selection.values[0];
+            return;
+          }
+          otherOptions.push(selection);
+        });
+      }
 
       return {
         protein: protein,
-        options: options
+        noodle: noodleSelection,
+        spiceLevel: rollSpiceLevel(item),
+        options: otherOptions
       };
     }
 
@@ -737,13 +827,27 @@ include __DIR__ . '/header.php';
           return;
         }
         var roll = rollItemDetails(item);
-        var parts = [];
+        var primaryParts = [];
+        var extraParts = [];
+
         if (roll && roll.protein) {
           var proteinLabel = roll.protein.label || roll.protein.value || '';
           if (proteinLabel) {
-            parts.push('Protein: ' + proteinLabel);
+            primaryParts.push(proteinLabel);
           }
         }
+
+        if (roll && roll.noodle) {
+          var noodleLabel = roll.noodle.label || roll.noodle.value || '';
+          if (noodleLabel) {
+            primaryParts.push(noodleLabel);
+          }
+        }
+
+        if (roll && typeof roll.spiceLevel === 'number' && !isNaN(roll.spiceLevel)) {
+          primaryParts.push('Spice level: ' + roll.spiceLevel);
+        }
+
         if (roll && Array.isArray(roll.options)) {
           roll.options.forEach(function (selection) {
             if (!selection || !selection.name || !selection.values || !selection.values.length) {
@@ -763,16 +867,20 @@ include __DIR__ . '/header.php';
             if (!valueText) {
               return;
             }
-            parts.push(selection.name + ': ' + valueText);
+            extraParts.push(selection.name + ': ' + valueText);
           });
         }
+
+        var parts = primaryParts.slice();
+        var slotsRemaining = Math.max(0, 3 - parts.length);
+        if (slotsRemaining > 0) {
+          parts = parts.concat(extraParts.slice(0, slotsRemaining));
+        }
+
         if (!parts.length) {
           rollEl.textContent = '';
           rollEl.setAttribute('hidden', 'hidden');
           return;
-        }
-        if (parts.length > 3) {
-          parts = parts.slice(0, 3);
         }
         rollEl.textContent = parts.join(' • ');
         rollEl.removeAttribute('hidden');
@@ -936,6 +1044,13 @@ include __DIR__ . '/header.php';
         pruneLoops();
         ensureLoop(3);
         recomputeLoopBounds();
+
+        if (activeCard && activeCard.isConnected) {
+          var activeIndex = activeCard.getAttribute('data-index');
+          if (activeIndex !== null) {
+            centerCard(currentLoop, parseInt(activeIndex, 10) || 0, false, 0);
+          }
+        }
       }
 
       recomputeLoopBounds();
