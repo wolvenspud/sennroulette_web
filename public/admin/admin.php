@@ -469,6 +469,7 @@ include __DIR__ . '/../header.php';
               </thead>
               <tbody>
               <?php
+                $deleteForms = [];
                 try {
                   $items = $pdo->query(
                     'SELECT i.id, i.name, i.min_spice, i.max_spice, i.enabled, i.noodle_type, c.label AS course_label, c.slug AS course_slug
@@ -483,6 +484,12 @@ include __DIR__ . '/../header.php';
                   'SELECT p.slug FROM item_allowed_proteins ap JOIN proteins p ON p.id = ap.protein_id WHERE ap.item_id = ?'
                 );
                 foreach ($items as $it):
+                  $deleteFormId = 'delete-item-' . (int)$it['id'];
+                  $deleteForms[] = '<form method="post" id="'.e($deleteFormId).'" style="display:none;">'
+                    . csrf_field()
+                    . '<input type="hidden" name="action" value="delete_item">'
+                    . '<input type="hidden" name="id" value="'.(int)$it['id'].'">'
+                    . '</form>';
                   $getAllowedProteinSlugs->execute([(int)$it['id']]);
                   $allowed = array_column($getAllowedProteinSlugs->fetchAll(), 'slug');
                   $isPANa = count($allowed) === 0;
@@ -561,12 +568,7 @@ include __DIR__ . '/../header.php';
                     </div>
                   </td>
                   <td class="delete-cell">
-                    <form method="post">
-                      <?= csrf_field() ?>
-                      <input type="hidden" name="action" value="delete_item">
-                      <input type="hidden" name="id" value="<?= (int)$it['id'] ?>">
-                      <button type="submit" onclick="return confirm('Delete this item?')">Delete</button>
-                    </form>
+                    <button type="submit" form="<?= e($deleteFormId) ?>" onclick="return confirm('Delete this item?')">Delete</button>
                   </td>
                 </tr>
               <?php endforeach; ?>
@@ -577,6 +579,7 @@ include __DIR__ . '/../header.php';
             <button type="submit">Save all changes</button>
           </div>
         </form>
+        <?php foreach ($deleteForms as $formHtml) { echo $formHtml; } ?>
       </section>
     <?php endif; ?>
   </div>
