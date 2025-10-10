@@ -364,6 +364,11 @@ h1 {
   gap: 18px;
 }
 
+.lootbox-wrapper[data-orientation="vertical"] {
+  gap: clamp(22px, 3vw, 32px);
+  align-items: center;
+}
+
 .lootbox-window {
   position: relative;
   overflow: hidden;
@@ -375,12 +380,23 @@ h1 {
   min-height: 200px;
 }
 
+.lootbox-window[data-orientation="vertical"] {
+  min-height: clamp(420px, 70vh, 620px);
+}
+
 .lootbox-strip {
   display: flex;
   gap: clamp(12px, 3vw, 24px);
   align-items: stretch;
   padding: clamp(20px, 4vw, 36px) clamp(12px, 4vw, 36px);
   will-change: transform;
+}
+
+.lootbox-strip[data-orientation="vertical"] {
+  flex-direction: column;
+  gap: clamp(14px, 3vh, 28px);
+  padding: clamp(24px, 4vw, 42px) clamp(18px, 5vw, 54px);
+  align-items: center;
 }
 
 .lootbox-item {
@@ -398,6 +414,17 @@ h1 {
   gap: 10px;
 }
 
+.lootbox-wrapper[data-orientation="vertical"] .lootbox-item {
+  flex: 0 0 auto;
+  width: min(560px, 92vw);
+  max-width: none;
+  flex-direction: row;
+  gap: clamp(14px, 3vw, 26px);
+  text-align: left;
+  align-items: center;
+  padding: clamp(16px, 2.6vw, 28px);
+}
+
 .lootbox-thumb {
   width: 100%;
   aspect-ratio: 4 / 3;
@@ -408,6 +435,13 @@ h1 {
   align-items: center;
   justify-content: center;
   min-height: clamp(110px, 16vw, 160px);
+}
+
+.lootbox-wrapper[data-orientation="vertical"] .lootbox-thumb {
+  width: clamp(140px, 20vw, 220px);
+  max-width: clamp(140px, 24vw, 240px);
+  min-height: clamp(120px, 18vw, 220px);
+  flex: 0 0 auto;
 }
 
 .lootbox-thumb img {
@@ -431,6 +465,14 @@ h1 {
   color: #fff;
 }
 
+.lootbox-wrapper[data-orientation="vertical"] .lootbox-item-text {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+  text-align: left;
+}
+
 .lootbox-item-text span {
   display: block;
   font-size: 0.85rem;
@@ -442,6 +484,10 @@ h1 {
   color: rgba(255, 255, 255, 0.7);
   line-height: 1.35;
   min-height: 1.2em;
+}
+
+.lootbox-wrapper[data-orientation="vertical"] .lootbox-item-roll {
+  text-align: left;
 }
 
 .lootbox-item-roll[hidden] {
@@ -460,13 +506,25 @@ h1 {
 
 .lootbox-marker {
   position: absolute;
+  pointer-events: none;
+}
+
+.lootbox-window[data-orientation="horizontal"] .lootbox-marker {
   top: 0;
   bottom: 0;
   left: 50%;
   width: 4px;
   transform: translateX(-50%);
   background: linear-gradient(to bottom, rgba(40, 172, 226, 0), rgba(40, 172, 226, 0.85), rgba(40, 172, 226, 0));
-  pointer-events: none;
+}
+
+.lootbox-window[data-orientation="vertical"] .lootbox-marker {
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 4px;
+  transform: translateY(-50%);
+  background: linear-gradient(to right, rgba(40, 172, 226, 0), rgba(40, 172, 226, 0.85), rgba(40, 172, 226, 0));
 }
 
 .spin-button {

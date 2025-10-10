@@ -6,7 +6,40 @@ declare(strict_types=1);
 
 // Database connection (SQLite)
 
-$dsn = 'sqlite:' . __DIR__ . '/../storage/database.sqlite';
+$dbPath = __DIR__ . '/../storage/database.sqlite';
+$storageDir = dirname($dbPath);
+
+if (!is_dir($storageDir)) {
+    mkdir($storageDir, 0775, true);
+}
+
+if (!is_writable($storageDir)) {
+    @chmod($storageDir, 0775);
+    if (!is_writable($storageDir)) {
+        @chmod($storageDir, 0777);
+    }
+}
+
+if (!file_exists($dbPath)) {
+    touch($dbPath);
+}
+
+if (!is_writable($dbPath)) {
+    @chmod($dbPath, 0664);
+    if (!is_writable($dbPath)) {
+        @chmod($dbPath, 0666);
+    }
+}
+
+if (!is_writable($storageDir)) {
+    throw new RuntimeException('Storage directory is not writable: ' . $storageDir);
+}
+
+if (!is_writable($dbPath)) {
+    throw new RuntimeException('SQLite database is not writable: ' . $dbPath);
+}
+
+$dsn = 'sqlite:' . $dbPath;
 
 $options = [
 

@@ -39,6 +39,13 @@ $tab = $_GET['tab'] ?? 'users';
 $ok  = !empty($_GET['ok']);
 $err = null;
 
+$noodleChoices = [
+    'na'         => 'N/A',
+    'flat_rice'  => 'Flat rice',
+    'thin_rice'  => 'Thin rice',
+    'egg_noodle' => 'Egg noodle',
+];
+
 /* POST actions (PRG) */
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     check_csrf();
@@ -72,10 +79,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $min     = (int)($_POST['min_spice'] ?? 0);
             $max     = (int)($_POST['max_spice'] ?? 5);
             $enabled = !empty($_POST['enabled']) ? 1 : 0;
-            $noodle  = $_POST['noodle_type'] ?? 'na';
+            $noodlesNA = !empty($_POST['noodles_na']);
+            $noodleSlugs = $_POST['noodles'] ?? [];
+            if (!is_array($noodleSlugs)) {
+                $noodleSlugs = [];
+            }
             if ($name === '' || $slug === '') throw new RuntimeException('Name and course are required.');
             if ($min < 0 || $min > 5 || $max < 0 || $max > 5 || $min > $max) throw new RuntimeException('Spice range must be 0..5 and min ≤ max.');
-            if (!in_array($noodle, ['na','flat_rice','thin_rice','egg_noodle'], true)) throw new RuntimeException('Invalid noodle option.');
+            $validNoodleSlugs = array_diff(array_keys($noodleChoices), ['na']);
+            $selectedNoodles = [];
+            foreach ($noodleSlugs as $slugValue) {
+                $slugValue = (string)$slugValue;
+                if (!in_array($slugValue, $validNoodleSlugs, true)) {
+                    throw new RuntimeException('Invalid noodle option.');
+                }
+                if (!in_array($slugValue, $selectedNoodles, true)) {
+                    $selectedNoodles[] = $slugValue;
+                }
+            }
+            $noodle = 'na';
+            if (!$noodlesNA && !empty($selectedNoodles)) {
+                $noodle = implode('|', $selectedNoodles);
+            }
             $c = $pdo->prepare('SELECT id FROM courses WHERE slug = ?');
             $c->execute([$slug]);
             $course = $c->fetch();
@@ -91,12 +116,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $min     = (int)($_POST['min_spice'] ?? 0);
             $max     = (int)($_POST['max_spice'] ?? 5);
             $enabled = !empty($_POST['enabled']) ? 1 : 0;
-            $noodle  = $_POST['noodle_type'] ?? 'na';
+            $noodlesNA = !empty($_POST['noodles_na']);
+            $noodleSlugs = $_POST['noodles'] ?? [];
+            if (!is_array($noodleSlugs)) {
+                $noodleSlugs = [];
+            }
             $proteinsNA   = !empty($_POST['proteins_na']);
             $proteinSlugs = $_POST['proteins'] ?? [];
             if ($id <= 0 || $name === '') throw new RuntimeException('Invalid item update.');
             if ($min < 0 || $min > 5 || $max < 0 || $max > 5 || $min > $max) throw new RuntimeException('Spice range must be 0..5 and min ≤ max.');
-            if (!in_array($noodle, ['na','flat_rice','thin_rice','egg_noodle'], true)) throw new RuntimeException('Invalid noodle option.');
+            $validNoodleSlugs = array_diff(array_keys($noodleChoices), ['na']);
+            $selectedNoodles = [];
+            foreach ($noodleSlugs as $slugValue) {
+                $slugValue = (string)$slugValue;
+                if (!in_array($slugValue, $validNoodleSlugs, true)) {
+                    throw new RuntimeException('Invalid noodle option.');
+                }
+                if (!in_array($slugValue, $selectedNoodles, true)) {
+                    $selectedNoodles[] = $slugValue;
+                }
+            }
+            $noodle = 'na';
+            if (!$noodlesNA && !empty($selectedNoodles)) {
+                $noodle = implode('|', $selectedNoodles);
+            }
 
             $pdo->beginTransaction();
             try {
@@ -239,20 +282,14 @@ include __DIR__ . '/../header.php';
               }
               return $out;
           };
-          $noodleOptions = function($cur) {
-              $opts = ['na'=>'N/A','flat_rice'=>'Flat rice','thin_rice'=>'Thin rice','egg_noodle'=>'Egg noodle'];
-              $out = '';
-              foreach ($opts as $v=>$lab) {
-                  $sel = ($cur === $v) ? ' selected' : '';
-                  $out .= '<option value="'.$v.'"'.$sel.'>'.$lab.'</option>';
-              }
-              return $out;
-          };
         ?>
 
         <form method="post" class="admin-form" style="margin-bottom:1rem;">
           <?= csrf_field() ?>
           <input type="hidden" name="action" value="add_item">
+          <label class="inline enabled-toggle">
+            <input type="checkbox" name="enabled" value="1" checked> Enabled
+          </label>
           <label>Name</label>
           <input type="text" name="name" required>
           <label>Course</label>
@@ -266,13 +303,20 @@ include __DIR__ . '/../header.php';
             <span>to</span>
             <select name="max_spice"><?= $spiceOptions(5) ?></select>
           </span>
-          <label>Noodles</label>
-          <select name="noodle_type" required>
-            <?= $noodleOptions('na') ?>
-          </select>
-          <label class="inline">
-            <input type="checkbox" name="enabled" value="1" checked> Enabled
-          </label>
+          <details class="dropdown noodle-group options-group">
+            <summary>Noodles: <span class="summary-text">N/A</span></summary>
+            <div class="dropdown-panel">
+              <label class="inline">
+                <input type="checkbox" class="noodle-na" name="noodles_na" value="1" checked> N/A
+              </label>
+              <hr style="border-color:rgba(255,255,255,0.15);">
+              <?php foreach ($noodleChoices as $slug => $label): if ($slug === 'na') continue; ?>
+                <label class="inline">
+                  <input type="checkbox" class="noodle-opt" name="noodles[]" value="<?= e($slug) ?>" disabled> <?= e($label) ?>
+                </label>
+              <?php endforeach; ?>
+            </div>
+          </details>
           <button type="submit">Add Item</button>
         </form>
 
@@ -304,6 +348,26 @@ include __DIR__ . '/../header.php';
                   foreach ($proteins as $p) if ($p['slug']===$s) return $p['label'] ?? $s;
                   return $s;
                 }, $allowed));
+
+                $storedNoodles = (string)($it['noodle_type'] ?? '');
+                $selectedNoodles = [];
+                if ($storedNoodles !== '' && strtolower($storedNoodles) !== 'na') {
+                    $parts = preg_split('/[|,]/', $storedNoodles);
+                    if (is_array($parts)) {
+                        foreach ($parts as $part) {
+                            $slugValue = trim((string)$part);
+                            if ($slugValue === '' || isset($selectedNoodles[$slugValue])) {
+                                continue;
+                            }
+                            if (!array_key_exists($slugValue, $noodleChoices)) {
+                                continue;
+                            }
+                            $selectedNoodles[$slugValue] = $noodleChoices[$slugValue];
+                        }
+                    }
+                }
+                $isNoodleNA = empty($selectedNoodles);
+                $noodleSummary = $isNoodleNA ? 'N/A' : implode(', ', array_values($selectedNoodles));
             ?>
               <tr>
                 <td><?= (int)$it['id'] ?></td>
@@ -312,8 +376,10 @@ include __DIR__ . '/../header.php';
                     <?= csrf_field() ?>
                     <input type="hidden" name="action" value="update_item">
                     <input type="hidden" name="id" value="<?= (int)$it['id'] ?>">
-                    <label>Name</label>
-                    <input type="text" name="name" value="<?= e($it['name']) ?>">
+                    <label class="inline enabled-toggle">
+                      <input type="checkbox" name="enabled" value="1" <?= (int)$it['enabled'] ? 'checked' : '' ?>> Enabled
+                    </label>
+                    <input type="text" name="name" value="<?= e($it['name']) ?>" placeholder="Name">
                     <label>Course</label>
                     <select name="course_slug">
                       <?= $courseOptions($it['course_slug']) ?>
@@ -324,14 +390,21 @@ include __DIR__ . '/../header.php';
                       <span>to</span>
                       <select name="max_spice"><?= $spiceOptions((int)($it['max_spice'] ?? 5)) ?></select>
                     </span>
-                    <label>Noodles</label>
-                    <select name="noodle_type">
-                      <?= $noodleOptions($it['noodle_type'] ?? 'na') ?>
-                    </select>
-                    <label class="inline">
-                      <input type="checkbox" name="enabled" value="1" <?= (int)$it['enabled'] ? 'checked' : '' ?>> Enabled
-                    </label>
-                    <details class="dropdown protein-group">
+                    <details class="dropdown noodle-group options-group">
+                      <summary>Noodles: <span class="summary-text"><?= e($noodleSummary) ?></span></summary>
+                      <div class="dropdown-panel">
+                        <label class="inline">
+                          <input type="checkbox" class="noodle-na" name="noodles_na" value="1" <?= $isNoodleNA ? 'checked' : '' ?>> N/A
+                        </label>
+                        <hr style="border-color:rgba(255,255,255,0.15);">
+                        <?php foreach ($noodleChoices as $slug => $label): if ($slug === 'na') continue; ?>
+                          <label class="inline">
+                            <input type="checkbox" class="noodle-opt" name="noodles[]" value="<?= e($slug) ?>" <?= isset($selectedNoodles[$slug]) ? 'checked' : '' ?> <?= $isNoodleNA ? 'disabled' : '' ?>> <?= e($label) ?>
+                          </label>
+                        <?php endforeach; ?>
+                      </div>
+                    </details>
+                    <details class="dropdown protein-group options-group">
                       <summary>Proteins: <span class="summary-text"><?= e($summary) ?></span></summary>
                       <div class="dropdown-panel">
                         <label class="inline">
@@ -367,23 +440,65 @@ include __DIR__ . '/../header.php';
 </div>
 
 <script>
-document.addEventListener('change', function(e) {
-  // Protein N/A behavior
-  const na = e.target.closest('.protein-group') ? e.target.closest('.protein-group').querySelector('.protein-na') : null;
-  if (e.target.classList.contains('protein-na')) {
-    const group = e.target.closest('.protein-group');
-    const opts = group.querySelectorAll('.protein-opt');
-    if (e.target.checked) {
-      summary.textContent = 'N/A';
-    } else {
-      const labels = [];
-      group.querySelectorAll('.protein-opt:checked').forEach(cb => {
-        const text = cb.parentElement.textContent.trim();
-        labels.push(text);
-      });
-      summary.textContent = labels.length ? labels.join(', ') : 'None';
-    }
+function refreshOptionGroup(group, optionClass, naClass) {
+  if (!group) return;
+  const summary = group.querySelector('.summary-text');
+  const naBox = group.querySelector('.' + naClass);
+  if (!summary || !naBox) return;
+
+  const options = group.querySelectorAll('.' + optionClass);
+
+  if (naBox.checked) {
+    options.forEach(function (cb) {
+      cb.checked = false;
+      cb.disabled = true;
+    });
+    summary.textContent = 'N/A';
+    return;
   }
+
+  options.forEach(function (cb) {
+    cb.disabled = false;
+  });
+
+  const labels = [];
+  options.forEach(function (cb) {
+    if (!cb.checked) return;
+    const text = cb.parentElement ? cb.parentElement.textContent.trim() : '';
+    if (text) labels.push(text);
+  });
+
+  summary.textContent = labels.length ? labels.join(', ') : 'None';
+}
+
+document.addEventListener('change', function (event) {
+  if (event.target.classList.contains('protein-na') || event.target.classList.contains('protein-opt')) {
+    const group = event.target.closest('.protein-group');
+    if (!group) return;
+    if (event.target.classList.contains('protein-opt') && event.target.checked) {
+      const na = group.querySelector('.protein-na');
+      if (na) na.checked = false;
+    }
+    refreshOptionGroup(group, 'protein-opt', 'protein-na');
+  }
+
+  if (event.target.classList.contains('noodle-na') || event.target.classList.contains('noodle-opt')) {
+    const group = event.target.closest('.noodle-group');
+    if (!group) return;
+    if (event.target.classList.contains('noodle-opt') && event.target.checked) {
+      const na = group.querySelector('.noodle-na');
+      if (na) na.checked = false;
+    }
+    refreshOptionGroup(group, 'noodle-opt', 'noodle-na');
+  }
+});
+
+document.querySelectorAll('.protein-group').forEach(function (group) {
+  refreshOptionGroup(group, 'protein-opt', 'protein-na');
+});
+
+document.querySelectorAll('.noodle-group').forEach(function (group) {
+  refreshOptionGroup(group, 'noodle-opt', 'noodle-na');
 });
 </script>
 
