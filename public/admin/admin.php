@@ -367,22 +367,37 @@ include __DIR__ . '/../header.php';
 </div>
 
 <script>
-document.addEventListener('change', function(e) {
-  // Protein N/A behavior
-  const na = e.target.closest('.protein-group') ? e.target.closest('.protein-group').querySelector('.protein-na') : null;
-  if (e.target.classList.contains('protein-na')) {
-    const group = e.target.closest('.protein-group');
-    const opts = group.querySelectorAll('.protein-opt');
-    if (e.target.checked) {
-      summary.textContent = 'N/A';
-    } else {
-      const labels = [];
-      group.querySelectorAll('.protein-opt:checked').forEach(cb => {
-        const text = cb.parentElement.textContent.trim();
-        labels.push(text);
-      });
-      summary.textContent = labels.length ? labels.join(', ') : 'None';
+document.addEventListener('change', function (event) {
+  const group = event.target.closest('.protein-group');
+  if (!group) return;
+
+  const summary = group.querySelector('.summary-text');
+  const naBox = group.querySelector('.protein-na');
+  if (!summary || !naBox) return;
+
+  if (event.target.classList.contains('protein-na')) {
+    const isChecked = event.target.checked;
+    group.querySelectorAll('.protein-opt').forEach(function (cb) {
+      cb.checked = false;
+      cb.disabled = isChecked;
+    });
+    summary.textContent = isChecked ? 'N/A' : 'None';
+    return;
+  }
+
+  if (event.target.classList.contains('protein-opt')) {
+    if (event.target.checked) {
+      naBox.checked = false;
+      naBox.disabled = false;
     }
+
+    const labels = [];
+    group.querySelectorAll('.protein-opt:checked').forEach(function (cb) {
+      const label = cb.parentElement.textContent.trim();
+      if (label !== '') labels.push(label);
+    });
+
+    summary.textContent = labels.length ? labels.join(', ') : 'None';
   }
 });
 </script>
