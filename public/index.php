@@ -936,6 +936,13 @@ include __DIR__ . '/header.php';
         pruneLoops();
         ensureLoop(3);
         recomputeLoopBounds();
+
+        if (activeCard && activeCard.isConnected) {
+          var activeIndex = activeCard.getAttribute('data-index');
+          if (activeIndex !== null) {
+            centerCard(currentLoop, parseInt(activeIndex, 10) || 0, false, 0);
+          }
+        }
       }
 
       recomputeLoopBounds();
