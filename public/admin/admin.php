@@ -109,6 +109,145 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt->execute([$name, $course['id'], $min, $max, $enabled, $noodle]);
             header("Location: /admin/admin.php?tab=items&ok=1"); exit;
 
+        } elseif ($action === 'bulk_update_items') {
+            $itemPayloads = $_POST['items'] ?? [];
+            if (!is_array($itemPayloads)) {
+                throw new RuntimeException('Invalid submission payload.');
+            }
+
+            if (empty($itemPayloads)) {
+                header("Location: /admin/admin.php?tab=items&ok=1"); exit;
+            }
+
+            $validNoodleSlugs = array_diff(array_keys($noodleChoices), ['na']);
+
+            $courseMap = [];
+            $courseStmt = $pdo->query('SELECT id, slug FROM courses');
+            if ($courseStmt instanceof \PDOStatement) {
+                foreach ($courseStmt->fetchAll() as $row) {
+                    $slug = (string)($row['slug'] ?? '');
+                    if ($slug === '') {
+                        continue;
+                    }
+                    $courseMap[$slug] = (int)$row['id'];
+                }
+            }
+
+            $proteinRows = [];
+            try {
+                $proteinRows = $pdo->query('SELECT id, slug FROM proteins')->fetchAll();
+            } catch (Throwable $proteinError) {
+                $proteinRows = [];
+            }
+            $proteinMap = [];
+            foreach ($proteinRows as $row) {
+                $slug = (string)($row['slug'] ?? '');
+                if ($slug === '') {
+                    continue;
+                }
+                $proteinMap[$slug] = (int)$row['id'];
+            }
+
+            $updateStmt = $pdo->prepare('UPDATE items SET name = ?, course_id = ?, min_spice = ?, max_spice = ?, enabled = ?, noodle_type = ? WHERE id = ?');
+            $deleteProteinsStmt = $pdo->prepare('DELETE FROM item_allowed_proteins WHERE item_id = ?');
+            $insertProteinStmt = $pdo->prepare('INSERT INTO item_allowed_proteins (item_id, protein_id) VALUES (?, ?)');
+
+            $pdo->beginTransaction();
+            try {
+                foreach ($itemPayloads as $key => $payload) {
+                    if (!is_array($payload)) {
+                        continue;
+                    }
+
+                    $id = isset($payload['id']) ? (int)$payload['id'] : (int)$key;
+                    if ($id <= 0) {
+                        continue;
+                    }
+
+                    $name = trim((string)($payload['name'] ?? ''));
+                    $slug = (string)($payload['course_slug'] ?? '');
+                    $min  = (int)($payload['min_spice'] ?? 0);
+                    $max  = (int)($payload['max_spice'] ?? 5);
+                    $enabled = !empty($payload['enabled']) ? 1 : 0;
+                    $noodlesNA = !empty($payload['noodles_na']);
+                    $noodleSlugs = $payload['noodles'] ?? [];
+                    if (!is_array($noodleSlugs)) {
+                        $noodleSlugs = [];
+                    }
+                    $proteinsNA = !empty($payload['proteins_na']);
+                    $proteinSlugs = $payload['proteins'] ?? [];
+                    if (!is_array($proteinSlugs)) {
+                        $proteinSlugs = [];
+                    }
+
+                    if ($name === '') {
+                        throw new RuntimeException('Name is required for item #' . $id . '.');
+                    }
+                    if ($slug === '' || !isset($courseMap[$slug])) {
+                        throw new RuntimeException('Course not found for item #' . $id . '.');
+                    }
+                    if ($min < 0 || $min > 5 || $max < 0 || $max > 5 || $min > $max) {
+                        throw new RuntimeException('Spice range must be 0..5 and min ≤ max for item #' . $id . '.');
+                    }
+
+                    $selectedNoodles = [];
+                    foreach ($noodleSlugs as $slugValue) {
+                        $slugValue = (string)$slugValue;
+                        if (!in_array($slugValue, $validNoodleSlugs, true)) {
+                            throw new RuntimeException('Invalid noodle option for item #' . $id . '.');
+                        }
+                        if (!in_array($slugValue, $selectedNoodles, true)) {
+                            $selectedNoodles[] = $slugValue;
+                        }
+                    }
+
+                    $noodle = 'na';
+                    if (!$noodlesNA && !empty($selectedNoodles)) {
+                        $noodle = implode('|', $selectedNoodles);
+                    }
+
+                    $selectedProteins = [];
+                    if (!$proteinsNA) {
+                        foreach ($proteinSlugs as $proteinSlug) {
+                            $proteinSlug = (string)$proteinSlug;
+                            if ($proteinSlug === '') {
+                                continue;
+                            }
+                            if (!isset($proteinMap[$proteinSlug])) {
+                                throw new RuntimeException('Invalid protein option for item #' . $id . '.');
+                            }
+                            if (!in_array($proteinSlug, $selectedProteins, true)) {
+                                $selectedProteins[] = $proteinSlug;
+                            }
+                        }
+                    }
+
+                    $updateStmt->execute([
+                        $name,
+                        $courseMap[$slug],
+                        $min,
+                        $max,
+                        $enabled,
+                        $noodle,
+                        $id,
+                    ]);
+
+                    $deleteProteinsStmt->execute([$id]);
+                    if (!$proteinsNA && !empty($selectedProteins)) {
+                        foreach ($selectedProteins as $proteinSlug) {
+                            $insertProteinStmt->execute([$id, $proteinMap[$proteinSlug]]);
+                        }
+                    }
+                }
+
+                $pdo->commit();
+            } catch (Throwable $inner) {
+                $pdo->rollBack();
+                throw $inner;
+            }
+
+            header("Location: /admin/admin.php?tab=items&ok=1"); exit;
+
         } elseif ($action === 'update_item') {
             $id      = (int)($_POST['id'] ?? 0);
             $name    = trim($_POST['name'] ?? '');
@@ -320,120 +459,124 @@ include __DIR__ . '/../header.php';
           <button type="submit">Add Item</button>
         </form>
 
-        <div class="admin-table-wrap">
-          <table class="admin-table">
-            <thead>
-              <tr><th>ID</th><th>Item</th><th>Delete</th></tr>
-            </thead>
-            <tbody>
-            <?php
-              try {
-                $items = $pdo->query(
-                  'SELECT i.id, i.name, i.min_spice, i.max_spice, i.enabled, i.noodle_type, c.label AS course_label, c.slug AS course_slug
-                   FROM items i JOIN courses c ON c.id = i.course_id
-                   ORDER BY i.id ASC' // ascending as requested
-                )->fetchAll();
-              } catch (Throwable $t) {
-                $items = [];
-                echo '<tr><td colspan="3">DB error loading items.</td></tr>';
-              }
-              $getAllowedProteinSlugs = $pdo->prepare(
-                'SELECT p.slug FROM item_allowed_proteins ap JOIN proteins p ON p.id = ap.protein_id WHERE ap.item_id = ?'
-              );
-              foreach ($items as $it):
-                $getAllowedProteinSlugs->execute([(int)$it['id']]);
-                $allowed = array_column($getAllowedProteinSlugs->fetchAll(), 'slug');
-                $isPANa = count($allowed) === 0;
-                $summary = $isPANa ? 'N/A' : implode(', ', array_map(function($s) use ($proteins){
-                  foreach ($proteins as $p) if ($p['slug']===$s) return $p['label'] ?? $s;
-                  return $s;
-                }, $allowed));
-
-                $storedNoodles = (string)($it['noodle_type'] ?? '');
-                $selectedNoodles = [];
-                if ($storedNoodles !== '' && strtolower($storedNoodles) !== 'na') {
-                    $parts = preg_split('/[|,]/', $storedNoodles);
-                    if (is_array($parts)) {
-                        foreach ($parts as $part) {
-                            $slugValue = trim((string)$part);
-                            if ($slugValue === '' || isset($selectedNoodles[$slugValue])) {
-                                continue;
-                            }
-                            if (!array_key_exists($slugValue, $noodleChoices)) {
-                                continue;
-                            }
-                            $selectedNoodles[$slugValue] = $noodleChoices[$slugValue];
-                        }
-                    }
+        <form method="post" class="admin-items-form">
+          <?= csrf_field() ?>
+          <input type="hidden" name="action" value="bulk_update_items">
+          <div class="admin-table-wrap">
+            <table class="admin-table">
+              <thead>
+                <tr><th>ID</th><th>Item</th><th>Delete</th></tr>
+              </thead>
+              <tbody>
+              <?php
+                try {
+                  $items = $pdo->query(
+                    'SELECT i.id, i.name, i.min_spice, i.max_spice, i.enabled, i.noodle_type, c.label AS course_label, c.slug AS course_slug
+                     FROM items i JOIN courses c ON c.id = i.course_id
+                     ORDER BY i.id ASC' // ascending as requested
+                  )->fetchAll();
+                } catch (Throwable $t) {
+                  $items = [];
+                  echo '<tr><td colspan="3">DB error loading items.</td></tr>';
                 }
-                $isNoodleNA = empty($selectedNoodles);
-                $noodleSummary = $isNoodleNA ? 'N/A' : implode(', ', array_values($selectedNoodles));
-            ?>
-              <tr>
-                <td><?= (int)$it['id'] ?></td>
-                <td>
-                  <form method="post" class="row-form item-row" data-item-id="<?= (int)$it['id'] ?>">
-                    <?= csrf_field() ?>
-                    <input type="hidden" name="action" value="update_item">
-                    <input type="hidden" name="id" value="<?= (int)$it['id'] ?>">
-                    <label class="inline enabled-toggle">
-                      <input type="checkbox" name="enabled" value="1" <?= (int)$it['enabled'] ? 'checked' : '' ?>> Enabled
-                    </label>
-                    <input type="text" name="name" value="<?= e($it['name']) ?>" placeholder="Name">
-                    <label>Course</label>
-                    <select name="course_slug">
-                      <?= $courseOptions($it['course_slug']) ?>
-                    </select>
-                    <label>Spice (min..max)</label>
-                    <span class="nowrap">
-                      <select name="min_spice"><?= $spiceOptions((int)($it['min_spice'] ?? 0)) ?></select>
-                      <span>to</span>
-                      <select name="max_spice"><?= $spiceOptions((int)($it['max_spice'] ?? 5)) ?></select>
-                    </span>
-                    <details class="dropdown noodle-group options-group">
-                      <summary>Noodles: <span class="summary-text"><?= e($noodleSummary) ?></span></summary>
-                      <div class="dropdown-panel">
-                        <label class="inline">
-                          <input type="checkbox" class="noodle-na" name="noodles_na" value="1" <?= $isNoodleNA ? 'checked' : '' ?>> N/A
-                        </label>
-                        <hr style="border-color:rgba(255,255,255,0.15);">
-                        <?php foreach ($noodleChoices as $slug => $label): if ($slug === 'na') continue; ?>
+                $getAllowedProteinSlugs = $pdo->prepare(
+                  'SELECT p.slug FROM item_allowed_proteins ap JOIN proteins p ON p.id = ap.protein_id WHERE ap.item_id = ?'
+                );
+                foreach ($items as $it):
+                  $getAllowedProteinSlugs->execute([(int)$it['id']]);
+                  $allowed = array_column($getAllowedProteinSlugs->fetchAll(), 'slug');
+                  $isPANa = count($allowed) === 0;
+                  $summary = $isPANa ? 'N/A' : implode(', ', array_map(function($s) use ($proteins){
+                    foreach ($proteins as $p) if ($p['slug']===$s) return $p['label'] ?? $s;
+                    return $s;
+                  }, $allowed));
+
+                  $storedNoodles = (string)($it['noodle_type'] ?? '');
+                  $selectedNoodles = [];
+                  if ($storedNoodles !== '' && strtolower($storedNoodles) !== 'na') {
+                      $parts = preg_split('/[|,]/', $storedNoodles);
+                      if (is_array($parts)) {
+                          foreach ($parts as $part) {
+                              $slugValue = trim((string)$part);
+                              if ($slugValue === '' || isset($selectedNoodles[$slugValue])) {
+                                  continue;
+                              }
+                              if (!array_key_exists($slugValue, $noodleChoices)) {
+                                  continue;
+                              }
+                              $selectedNoodles[$slugValue] = $noodleChoices[$slugValue];
+                          }
+                      }
+                  }
+                  $isNoodleNA = empty($selectedNoodles);
+                  $noodleSummary = $isNoodleNA ? 'N/A' : implode(', ', array_values($selectedNoodles));
+              ?>
+                <tr>
+                  <td><?= (int)$it['id'] ?></td>
+                  <td>
+                    <div class="row-form item-row" data-item-id="<?= (int)$it['id'] ?>">
+                      <input type="hidden" name="items[<?= (int)$it['id'] ?>][id]" value="<?= (int)$it['id'] ?>">
+                      <label class="inline enabled-toggle">
+                        <input type="checkbox" name="items[<?= (int)$it['id'] ?>][enabled]" value="1" <?= (int)$it['enabled'] ? 'checked' : '' ?>> Enabled
+                      </label>
+                      <input type="text" name="items[<?= (int)$it['id'] ?>][name]" value="<?= e($it['name']) ?>" placeholder="Name">
+                      <label>Course</label>
+                      <select name="items[<?= (int)$it['id'] ?>][course_slug]">
+                        <?= $courseOptions($it['course_slug']) ?>
+                      </select>
+                      <label>Spice (min..max)</label>
+                      <span class="nowrap">
+                        <select name="items[<?= (int)$it['id'] ?>][min_spice]"><?= $spiceOptions((int)($it['min_spice'] ?? 0)) ?></select>
+                        <span>to</span>
+                        <select name="items[<?= (int)$it['id'] ?>][max_spice]"><?= $spiceOptions((int)($it['max_spice'] ?? 5)) ?></select>
+                      </span>
+                      <details class="dropdown noodle-group options-group">
+                        <summary>Noodles: <span class="summary-text"><?= e($noodleSummary) ?></span></summary>
+                        <div class="dropdown-panel">
                           <label class="inline">
-                            <input type="checkbox" class="noodle-opt" name="noodles[]" value="<?= e($slug) ?>" <?= isset($selectedNoodles[$slug]) ? 'checked' : '' ?> <?= $isNoodleNA ? 'disabled' : '' ?>> <?= e($label) ?>
+                            <input type="checkbox" class="noodle-na" name="items[<?= (int)$it['id'] ?>][noodles_na]" value="1" <?= $isNoodleNA ? 'checked' : '' ?>> N/A
                           </label>
-                        <?php endforeach; ?>
-                      </div>
-                    </details>
-                    <details class="dropdown protein-group options-group">
-                      <summary>Proteins: <span class="summary-text"><?= e($summary) ?></span></summary>
-                      <div class="dropdown-panel">
-                        <label class="inline">
-                          <input type="checkbox" class="protein-na" name="proteins_na" value="1" <?= $isPANa ? 'checked' : '' ?>> N/A
-                        </label>
-                        <hr style="border-color:rgba(255,255,255,0.15);">
-                        <?php foreach ($proteins as $p): ?>
+                          <hr style="border-color:rgba(255,255,255,0.15);">
+                          <?php foreach ($noodleChoices as $slug => $label): if ($slug === 'na') continue; ?>
+                            <label class="inline">
+                              <input type="checkbox" class="noodle-opt" name="items[<?= (int)$it['id'] ?>][noodles][]" value="<?= e($slug) ?>" <?= isset($selectedNoodles[$slug]) ? 'checked' : '' ?> <?= $isNoodleNA ? 'disabled' : '' ?>> <?= e($label) ?>
+                            </label>
+                          <?php endforeach; ?>
+                        </div>
+                      </details>
+                      <details class="dropdown protein-group options-group">
+                        <summary>Proteins: <span class="summary-text"><?= e($summary) ?></span></summary>
+                        <div class="dropdown-panel">
                           <label class="inline">
-                            <input type="checkbox" class="protein-opt" name="proteins[]" value="<?= e($p['slug']) ?>" <?= in_array($p['slug'], $allowed, true) ? 'checked' : '' ?>> <?= e($p['label'] ?? $p['slug']) ?>
+                            <input type="checkbox" class="protein-na" name="items[<?= (int)$it['id'] ?>][proteins_na]" value="1" <?= $isPANa ? 'checked' : '' ?>> N/A
                           </label>
-                        <?php endforeach; ?>
-                      </div>
-                    </details>
-                    <button type="submit">Save</button>
-                  </form>
-                </td>
-                <td class="delete-cell">
-                  <form method="post">
-                    <?= csrf_field() ?>
-                    <input type="hidden" name="action" value="delete_item">
-                    <input type="hidden" name="id" value="<?= (int)$it['id'] ?>">
-                    <button type="submit" onclick="return confirm('Delete this item?')">Delete</button>
-                  </form>
-                </td>
-              </tr>
-            <?php endforeach; ?>
-            </tbody>
-          </table>
-        </div>
+                          <hr style="border-color:rgba(255,255,255,0.15);">
+                          <?php foreach ($proteins as $p): ?>
+                            <label class="inline">
+                              <input type="checkbox" class="protein-opt" name="items[<?= (int)$it['id'] ?>][proteins][]" value="<?= e($p['slug']) ?>" <?= in_array($p['slug'], $allowed, true) ? 'checked' : '' ?>> <?= e($p['label'] ?? $p['slug']) ?>
+                            </label>
+                          <?php endforeach; ?>
+                        </div>
+                      </details>
+                    </div>
+                  </td>
+                  <td class="delete-cell">
+                    <form method="post">
+                      <?= csrf_field() ?>
+                      <input type="hidden" name="action" value="delete_item">
+                      <input type="hidden" name="id" value="<?= (int)$it['id'] ?>">
+                      <button type="submit" onclick="return confirm('Delete this item?')">Delete</button>
+                    </form>
+                  </td>
+                </tr>
+              <?php endforeach; ?>
+              </tbody>
+            </table>
+          </div>
+          <div class="admin-items-actions">
+            <button type="submit">Save all changes</button>
+          </div>
+        </form>
       </section>
     <?php endif; ?>
   </div>

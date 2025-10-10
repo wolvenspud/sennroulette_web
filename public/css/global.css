@@ -278,6 +278,17 @@ h1 {
   flex-wrap: wrap;
   gap: 0.5rem;
 }
+
+.admin-items-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.admin-items-actions {
+  display: flex;
+  justify-content: flex-end;
+}
 .admin-box .admin-form label {                   /* override global label */
   display: inline-block;
   margin: 0;
@@ -365,6 +376,12 @@ h1 {
 }
 
 .lootbox-window {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.lootbox-viewport {
   position: relative;
   overflow: hidden;
   width: 100%;

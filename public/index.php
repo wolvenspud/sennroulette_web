@@ -593,8 +593,9 @@ include __DIR__ . '/header.php';
       </div>
     <?php else: ?>
       <div class="lootbox-wrapper">
-        <div class="lootbox-window" id="lootbox-window">
-          <div class="lootbox-strip" id="lootbox-strip">
+        <div class="lootbox-window">
+          <div class="lootbox-viewport" id="lootbox-window">
+            <div class="lootbox-strip" id="lootbox-strip">
             <?php for ($loop = 0; $loop < 3; $loop++): ?>
               <?php foreach ($filteredItems as $index => $item): ?>
                 <?php
@@ -619,10 +620,11 @@ include __DIR__ . '/header.php';
                 </div>
               <?php endforeach; ?>
             <?php endfor; ?>
+            </div>
+            <div class="lootbox-marker"></div>
           </div>
-          <div class="lootbox-marker"></div>
+          <button class="spin-button" id="spin-button">Spin the wheel</button>
         </div>
-        <button class="spin-button" id="spin-button">Spin the wheel</button>
       </div>
 
     <?php endif; ?>
